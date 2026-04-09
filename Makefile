@@ -4,7 +4,7 @@ VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "d
 LDFLAGS   := -s -w -X main.version=$(VERSION)
 GOFLAGS   := -trimpath
 
-.PHONY: all build install run run-info test lint vet fmt clean setup release-dry help
+.PHONY: all build install run run-info test lint vet fmt tidy clean setup release-dry help
 
 all: build ## Build the binary (default)
 
@@ -28,11 +28,25 @@ test: ## Run all unit tests with colored, grouped output (falls back to go test 
 vet: ## Run go vet — catches common mistakes like wrong printf formats or unreachable code
 	go vet ./...
 
-lint: vet ## Run go vet + staticcheck — deeper analysis for bugs, performance, and style issues
+lint: vet tidy-check ## Run go vet + staticcheck + tidy check — deeper analysis for bugs, performance, and style issues
 	@which staticcheck > /dev/null 2>&1 && staticcheck ./... || echo "staticcheck not installed — skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"
 
 fmt: ## Auto-format all Go files with gofmt (simplifies code too, e.g. removes unnecessary parens)
 	gofmt -s -w .
+
+tidy: ## Run go mod tidy and verify module integrity
+	go mod tidy
+	go mod verify
+
+tidy-check: ## Fail if go.mod/go.sum would change after 'go mod tidy' (used by lint and CI)
+	@cp go.mod go.mod.bak && cp go.sum go.sum.bak; \
+	go mod tidy; \
+	if ! diff -q go.mod go.mod.bak > /dev/null || ! diff -q go.sum go.sum.bak > /dev/null; then \
+		mv go.mod.bak go.mod; mv go.sum.bak go.sum; \
+		echo "ERROR: go.mod/go.sum are not tidy. Run 'make tidy'."; \
+		exit 1; \
+	fi; \
+	rm -f go.mod.bak go.sum.bak
 
 clean: ## Delete the bin/ directory and clear Go's build cache
 	rm -rf bin/

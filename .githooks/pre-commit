@@ -17,4 +17,14 @@ go vet ./parser/... ./runner/... ./detector/... ./tui/... .
 echo "==> pre-commit: building..."
 go build ./...
 
+echo "==> pre-commit: checking go.mod tidy..."
+TIDY_BEFORE=$(cat go.mod go.sum)
+go mod tidy
+TIDY_AFTER=$(cat go.mod go.sum)
+if [ "$TIDY_BEFORE" != "$TIDY_AFTER" ]; then
+    echo "ERROR: go.mod/go.sum are not tidy."
+    echo "Run 'make tidy' and commit the result."
+    exit 1
+fi
+
 echo "==> pre-commit: all checks passed."
