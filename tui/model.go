@@ -18,6 +18,27 @@ const (
 	phaseArgs
 )
 
+// Vertical space budget. Each constant is the number of terminal rows the
+// corresponding block consumes when rendered. visibleLines sums these to
+// derive how many task rows fit in the remaining space — replacing the
+// previous magic number 15.
+const (
+	rowsBanner     = 7 // bordered banner box
+	rowsProject    = 1 // project info line
+	rowsBlank1     = 1 // blank between project info and header
+	rowsColHeader  = 1
+	rowsColSep     = 1
+	rowsBlank2     = 1 // blank before filter
+	rowsFilter     = 1
+	rowsBlank3     = 1 // blank between filter and footer
+	rowsFooter     = 1
+	rowsExecResult = 4 // bordered result box + spacing
+
+	rowsListOverhead = rowsBanner + rowsProject + rowsBlank1 +
+		rowsColHeader + rowsColSep + rowsBlank2 +
+		rowsFilter + rowsBlank3 + rowsFooter + 2 // +2 safety margin
+)
+
 // argInput holds user input for a single argument field.
 type argInput struct {
 	def   parser.ArgDef
@@ -76,31 +97,83 @@ func (r execResult) summary() string {
 	return fmt.Sprintf("%s failed: %v", r.taskName, r.err)
 }
 
-// Model is the Bubble Tea model for the task list TUI.
-type Model struct {
-	tasks     []parser.Task
-	filtered  []parser.Task
-	filter    string
-	cursor    int
-	offset    int
+// listState holds browse/filter state for the task list phase.
+type listState struct {
+	tasks    []parser.Task
+	filtered []parser.Task
+	filter   string
+	cursor   int
+	offset   int
+	lastRun  *execResult
+}
+
+// argsState holds input state for the arguments phase.
+type argsState struct {
+	selected       *parser.Task
+	inputs         []argInput
+	cursor         int
+	simpleArg      string
+	collected      []string
+	showValidation bool
+}
+
+// isSimpleMode reports whether the current task uses the free-form prompt
+// (i.e. has no structured args config).
+func (a argsState) isSimpleMode() bool {
+	return a.selected != nil && len(a.selected.Args) == 0
+}
+
+// collectConfigArgs returns non-empty values from structured fields,
+// in declaration order.
+func (a argsState) collectConfigArgs() []string {
+	var args []string
+	for _, inp := range a.inputs {
+		if inp.value != "" {
+			args = append(args, inp.value)
+		}
+	}
+	return args
+}
+
+// missingRequired reports whether any required field is still empty.
+func (a argsState) missingRequired() bool {
+	for _, inp := range a.inputs {
+		if inp.def.Required && inp.value == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// labelWidth returns the widest arg label, used to align labels in the form.
+func (a argsState) labelWidth() int {
+	w := 0
+	for _, inp := range a.inputs {
+		if len(inp.def.Name) > w {
+			w = len(inp.def.Name)
+		}
+	}
+	return w
+}
+
+// layout holds rendering-time terminal dimensions and precomputed widths.
+type layout struct {
 	width     int
 	height    int
-	header    string
 	nameWidth int
 	descWidth int
-	runCtx    parser.RunContext
-	info      bool
-	selected  *parser.Task
-	quitting  bool
-	lastRun   *execResult
+}
 
-	// Args phase state.
-	phase          phase
-	argInputs      []argInput
-	argCursor      int
-	simpleArg      string
-	collectedArgs  []string
-	showValidation bool
+// Model is the Bubble Tea model for the task list TUI.
+type Model struct {
+	list     listState
+	args     argsState
+	layout   layout
+	header   string
+	runCtx   parser.RunContext
+	info     bool
+	phase    phase
+	quitting bool
 }
 
 // New creates a Model ready to display the given tasks.
@@ -116,13 +189,17 @@ func New(tasks []parser.Task, header string, runCtx parser.RunContext, info bool
 		}
 	}
 	return Model{
-		tasks:     tasks,
-		filtered:  tasks,
-		header:    header,
-		runCtx:    runCtx,
-		info:      info,
-		nameWidth: nw,
-		descWidth: dw,
+		list: listState{
+			tasks:    tasks,
+			filtered: tasks,
+		},
+		layout: layout{
+			nameWidth: nw,
+			descWidth: dw,
+		},
+		header: header,
+		runCtx: runCtx,
+		info:   info,
 	}
 }
 
@@ -131,50 +208,19 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// visibleLines returns how many task rows fit in the current viewport.
+// Derived from rowsListOverhead + an extra allotment when the last-run
+// result box is visible.
 func (m Model) visibleLines() int {
-	// banner box(7) + project info(1) + blank(1) + filter(1) + blank(1) + col header(1) + col sep(1) + tasks(N) + blank(1) + footer(1)
-	overhead := 15
-	if m.lastRun != nil {
-		overhead += 4
+	overhead := rowsListOverhead
+	if m.list.lastRun != nil {
+		overhead += rowsExecResult
 	}
-	lines := m.height - overhead
+	lines := m.layout.height - overhead
 	if lines < 1 {
 		lines = 1
 	}
 	return lines
-}
-
-func (m Model) isSimpleMode() bool {
-	return m.selected != nil && len(m.selected.Args) == 0
-}
-
-func (m Model) collectConfigArgs() []string {
-	var args []string
-	for _, inp := range m.argInputs {
-		if inp.value != "" {
-			args = append(args, inp.value)
-		}
-	}
-	return args
-}
-
-func (m Model) missingRequired() bool {
-	for _, inp := range m.argInputs {
-		if inp.def.Required && inp.value == "" {
-			return true
-		}
-	}
-	return false
-}
-
-func (m Model) argLabelWidth() int {
-	w := 0
-	for _, inp := range m.argInputs {
-		if len(inp.def.Name) > w {
-			w = len(inp.def.Name)
-		}
-	}
-	return w
 }
 
 // collectSimpleArgs splits the free-form input into arguments with basic quote support.
@@ -211,7 +257,7 @@ func collectSimpleArgs(raw string) []string {
 
 // execTask returns a tea.Cmd that runs the selected task as a subprocess.
 func (m Model) execTask() tea.Cmd {
-	cmd := runner.BuildCmd(m.runCtx, m.selected.Name, m.collectedArgs)
+	cmd := runner.BuildCmd(m.runCtx, m.args.selected.Name, m.args.collected)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return execDoneMsg{err: err}
 	})
@@ -220,25 +266,15 @@ func (m Model) execTask() tea.Cmd {
 // cancelToList returns to the list without recording an execution.
 func (m Model) cancelToList() Model {
 	m.phase = phaseList
-	m.selected = nil
-	m.argInputs = nil
-	m.argCursor = 0
-	m.simpleArg = ""
-	m.collectedArgs = nil
-	m.showValidation = false
+	m.args = argsState{}
 	return m
 }
 
 // resetToList clears args state, records the execution result, and returns to the list.
 func (m Model) resetToList(err error) Model {
-	result := newExecResult(m.selected.Name, m.runCtx, m.collectedArgs, err)
-	m.lastRun = &result
+	result := newExecResult(m.args.selected.Name, m.runCtx, m.args.collected, err)
+	m.list.lastRun = &result
 	m.phase = phaseList
-	m.selected = nil
-	m.argInputs = nil
-	m.argCursor = 0
-	m.simpleArg = ""
-	m.collectedArgs = nil
-	m.showValidation = false
+	m.args = argsState{}
 	return m
 }

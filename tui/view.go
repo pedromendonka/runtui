@@ -16,7 +16,7 @@ const (
 
 // View implements tea.Model.
 func (m Model) View() string {
-	if m.quitting || m.width == 0 || m.height == 0 {
+	if m.quitting || m.layout.width == 0 || m.layout.height == 0 {
 		return ""
 	}
 	switch m.phase {
@@ -27,27 +27,34 @@ func (m Model) View() string {
 	}
 }
 
-// --- List view ---
-
-func (m Model) viewList() string {
-	var b strings.Builder
-
-	// Banner — show full art on wide terminals, fallback on narrow ones.
-	if m.width >= 40 {
-		art := strings.Join([]string{
+// renderBanner writes the banner (full art on wide terminals, short label
+// on narrow ones) followed by a newline. Shared between list and args views.
+func (m Model) renderBanner(b *strings.Builder, withTagline bool) {
+	if m.layout.width >= 40 {
+		lines := []string{
 			styleBannerL1.Render(bannerArtL1),
 			styleBannerL2.Render(bannerArtL2),
 			styleBannerL3.Render(bannerArtL3),
 			styleBannerL4.Render(bannerArtL4),
-			styleTagline.Render("One TUI to run them all."),
-		}, "\n")
-		b.WriteString(styleBannerBox.Render(art))
+		}
+		if withTagline {
+			lines = append(lines, styleTagline.Render("One TUI to run them all."))
+		}
+		b.WriteString(styleBannerBox.Render(strings.Join(lines, "\n")))
 		b.WriteString("\n")
 	} else {
 		b.WriteString("  ")
 		b.WriteString(styleBannerL3.Render("runtui"))
 		b.WriteString("\n")
 	}
+}
+
+// --- List view ---
+
+func (m Model) viewList() string {
+	var b strings.Builder
+
+	m.renderBanner(&b, true)
 
 	// Project info.
 	b.WriteString("  ")
@@ -55,11 +62,11 @@ func (m Model) viewList() string {
 	b.WriteString("\n\n")
 
 	// Column headers.
-	hasDesc := m.descWidth > 0
+	hasDesc := m.layout.descWidth > 0
 	descW, cmdW := m.columnWidths()
 
 	b.WriteString("    ")
-	b.WriteString(styleColHeader.Render(fmt.Sprintf("%-*s", m.nameWidth, "Task")))
+	b.WriteString(styleColHeader.Render(fmt.Sprintf("%-*s", m.layout.nameWidth, "Task")))
 	if hasDesc {
 		b.WriteString("  ")
 		b.WriteString(styleColHeader.Render(fmt.Sprintf("%-*s", descW, "Description")))
@@ -68,7 +75,7 @@ func (m Model) viewList() string {
 	b.WriteString(styleColHeader.Render("Command"))
 	b.WriteString("\n")
 
-	sepLen := m.width - 4
+	sepLen := m.layout.width - 4
 	if sepLen < 20 {
 		sepLen = 20
 	}
@@ -77,28 +84,28 @@ func (m Model) viewList() string {
 	b.WriteString("\n")
 
 	// Task rows.
-	if len(m.filtered) == 0 {
+	if len(m.list.filtered) == 0 {
 		b.WriteString("    ")
 		b.WriteString(styleEmpty.Render("no matching tasks"))
 		b.WriteString("\n")
 	} else {
 		vis := m.visibleLines()
-		end := m.offset + vis
-		if end > len(m.filtered) {
-			end = len(m.filtered)
+		end := m.list.offset + vis
+		if end > len(m.list.filtered) {
+			end = len(m.list.filtered)
 		}
-		for i := m.offset; i < end; i++ {
-			m.renderTask(&b, m.filtered[i], i == m.cursor, descW, cmdW)
+		for i := m.list.offset; i < end; i++ {
+			m.renderTask(&b, m.list.filtered[i], i == m.list.cursor, descW, cmdW)
 		}
 	}
 
 	// Filter.
 	b.WriteString("\n  ")
 	b.WriteString(styleFilterLabel.Render("/ "))
-	b.WriteString(styleFilterText.Render(m.filter))
+	b.WriteString(styleFilterText.Render(m.list.filter))
 	b.WriteString(styleFilterCur.Render("│"))
-	if len(m.filter) > 0 {
-		b.WriteString(styleTaskCount.Render(fmt.Sprintf("  %d/%d", len(m.filtered), len(m.tasks))))
+	if len(m.list.filter) > 0 {
+		b.WriteString(styleTaskCount.Render(fmt.Sprintf("  %d/%d", len(m.list.filtered), len(m.list.tasks))))
 	}
 
 	// Footer.
@@ -106,7 +113,7 @@ func (m Model) viewList() string {
 	b.WriteString(renderFooter("↑↓", "navigate", "/", "filter", "enter", "run", "q", "quit"))
 
 	// Last execution result.
-	if m.lastRun != nil {
+	if m.list.lastRun != nil {
 		b.WriteString("\n\n")
 		m.renderExecResult(&b)
 	}
@@ -116,25 +123,25 @@ func (m Model) viewList() string {
 
 // columnWidths computes the description and command column widths for the current terminal.
 func (m Model) columnWidths() (descW, cmdW int) {
-	if m.descWidth == 0 {
+	if m.layout.descWidth == 0 {
 		// No descriptions — all remaining space goes to command.
-		cmdW = m.width - 8 - m.nameWidth
+		cmdW = m.layout.width - 8 - m.layout.nameWidth
 		return 0, cmdW
 	}
 
-	descW = m.descWidth
+	descW = m.layout.descWidth
 	if descW > 60 {
 		descW = 60
 	}
 	// cursor(4) + name(nameWidth) + gap(2) + desc(descW) + gap(2) + cmd
-	cmdW = m.width - 10 - m.nameWidth - descW
+	cmdW = m.layout.width - 10 - m.layout.nameWidth - descW
 	if cmdW < 15 {
 		// Squeeze the description column to give command at least 15 chars.
-		descW = m.width - 10 - m.nameWidth - 15
+		descW = m.layout.width - 10 - m.layout.nameWidth - 15
 		if descW < 0 {
 			descW = 0
 		}
-		cmdW = m.width - 10 - m.nameWidth - descW
+		cmdW = m.layout.width - 10 - m.layout.nameWidth - descW
 	}
 	return descW, cmdW
 }
@@ -149,7 +156,7 @@ func (m Model) renderTask(b *strings.Builder, t parser.Task, selected bool, desc
 		dStyle = styleDescSel
 	}
 
-	name := nameStyle.Render(fmt.Sprintf("%-*s", m.nameWidth, t.Name))
+	name := nameStyle.Render(fmt.Sprintf("%-*s", m.layout.nameWidth, t.Name))
 
 	cmd := t.Command
 	if !m.info && cmdW > 0 {
@@ -175,29 +182,16 @@ func (m Model) renderTask(b *strings.Builder, t parser.Task, selected bool, desc
 func (m Model) viewArgs() string {
 	var b strings.Builder
 
-	if m.width >= 40 {
-		art := strings.Join([]string{
-			styleBannerL1.Render(bannerArtL1),
-			styleBannerL2.Render(bannerArtL2),
-			styleBannerL3.Render(bannerArtL3),
-			styleBannerL4.Render(bannerArtL4),
-		}, "\n")
-		b.WriteString(styleBannerBox.Render(art))
-		b.WriteString("\n")
-	} else {
-		b.WriteString("  ")
-		b.WriteString(styleBannerL3.Render("runtui"))
-		b.WriteString("\n")
-	}
+	m.renderBanner(&b, false)
 
 	// Task name + command.
 	b.WriteString("  ")
-	b.WriteString(styleProjectInfo.Render(m.selected.Name))
+	b.WriteString(styleProjectInfo.Render(m.args.selected.Name))
 	b.WriteString("  ")
-	b.WriteString(styleSubHeader.Render(m.selected.Command))
+	b.WriteString(styleSubHeader.Render(m.args.selected.Command))
 	b.WriteString("\n\n")
 
-	if m.isSimpleMode() {
+	if m.args.isSimpleMode() {
 		m.renderSimpleArgs(&b)
 	} else {
 		m.renderConfigArgs(&b)
@@ -209,17 +203,17 @@ func (m Model) viewArgs() string {
 func (m Model) renderSimpleArgs(b *strings.Builder) {
 	b.WriteString("  ")
 	b.WriteString(styleArgActive.Render("Arguments: "))
-	b.WriteString(styleFilterText.Render(m.simpleArg))
+	b.WriteString(styleFilterText.Render(m.args.simpleArg))
 	b.WriteString(styleFilterCur.Render("│"))
 	b.WriteString("\n\n  ")
 	b.WriteString(renderFooter("enter", "run (empty to skip)", "esc", "back"))
 }
 
 func (m Model) renderConfigArgs(b *strings.Builder) {
-	labelW := m.argLabelWidth()
+	labelW := m.args.labelWidth()
 
-	for i, inp := range m.argInputs {
-		active := i == m.argCursor
+	for i, inp := range m.args.inputs {
+		active := i == m.args.cursor
 
 		label := fmt.Sprintf("%-*s", labelW, inp.def.Name)
 		b.WriteString("  ")
@@ -243,7 +237,7 @@ func (m Model) renderConfigArgs(b *strings.Builder) {
 			b.WriteString(inp.value)
 		}
 
-		if m.showValidation && inp.def.Required && inp.value == "" {
+		if m.args.showValidation && inp.def.Required && inp.value == "" {
 			b.WriteString("  ")
 			b.WriteString(styleError.Render("required"))
 		}
@@ -265,7 +259,7 @@ func (m Model) renderConfigArgs(b *strings.Builder) {
 }
 
 func (m Model) renderExecResult(b *strings.Builder) {
-	r := m.lastRun
+	r := m.list.lastRun
 
 	status := "✓ Done"
 	statusStyle := styleResultOK
@@ -288,15 +282,15 @@ func (m Model) renderExecResult(b *strings.Builder) {
 	content.WriteString("  ")
 	content.WriteString(styleColHeader.Render(fmt.Sprintf("%-6s", "Code")))
 	content.WriteString("  ")
-	content.WriteString(styleColHeader.Render(fmt.Sprintf("%-*s", m.nameWidth, "Task")))
+	content.WriteString(styleColHeader.Render(fmt.Sprintf("%-*s", m.layout.nameWidth, "Task")))
 	content.WriteString("  ")
 	content.WriteString(styleColHeader.Render("Command"))
 	content.WriteString("\n")
 
 	// Separator.
-	sepLen := 10 + 2 + 6 + 2 + m.nameWidth + 2 + len(r.command)
-	if sepLen > m.width-8 {
-		sepLen = m.width - 8
+	sepLen := 10 + 2 + 6 + 2 + m.layout.nameWidth + 2 + len(r.command)
+	if sepLen > m.layout.width-8 {
+		sepLen = m.layout.width - 8
 	}
 	if sepLen < 20 {
 		sepLen = 20
@@ -313,7 +307,7 @@ func (m Model) renderExecResult(b *strings.Builder) {
 		content.WriteString(styleResultOK.Render(fmt.Sprintf("%-6s", code)))
 	}
 	content.WriteString("  ")
-	content.WriteString(styleResultValue.Render(fmt.Sprintf("%-*s", m.nameWidth, r.taskName)))
+	content.WriteString(styleResultValue.Render(fmt.Sprintf("%-*s", m.layout.nameWidth, r.taskName)))
 	content.WriteString("  ")
 	content.WriteString(styleResultValue.Render(r.command))
 

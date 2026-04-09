@@ -18,8 +18,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleArgsKey(msg)
 		}
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.layout.width = msg.Width
+		m.layout.height = msg.Height
 	case execDoneMsg:
 		m = m.resetToList(msg.err)
 	}
@@ -35,69 +35,69 @@ func (m Model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyEsc:
-		if m.filter != "" {
-			m.filter = ""
-			m.filtered = m.tasks
-			m.cursor = 0
-			m.offset = 0
+		if m.list.filter != "" {
+			m.list.filter = ""
+			m.list.filtered = m.list.tasks
+			m.list.cursor = 0
+			m.list.offset = 0
 		} else {
 			m.quitting = true
 			return m, tea.Quit
 		}
 
 	case tea.KeyUp:
-		if m.cursor > 0 {
-			m.cursor--
-			if m.cursor < m.offset {
-				m.offset = m.cursor
+		if m.list.cursor > 0 {
+			m.list.cursor--
+			if m.list.cursor < m.list.offset {
+				m.list.offset = m.list.cursor
 			}
 		}
 
 	case tea.KeyDown:
-		if m.cursor < len(m.filtered)-1 {
-			m.cursor++
-			if vis := m.visibleLines(); m.cursor >= m.offset+vis {
-				m.offset = m.cursor - vis + 1
+		if m.list.cursor < len(m.list.filtered)-1 {
+			m.list.cursor++
+			if vis := m.visibleLines(); m.list.cursor >= m.list.offset+vis {
+				m.list.offset = m.list.cursor - vis + 1
 			}
 		}
 
 	case tea.KeyEnter:
-		if len(m.filtered) > 0 && m.cursor < len(m.filtered) {
-			task := m.filtered[m.cursor]
-			m.selected = &task
-			m.lastRun = nil
+		if len(m.list.filtered) > 0 && m.list.cursor < len(m.list.filtered) {
+			task := m.list.filtered[m.list.cursor]
+			m.args.selected = &task
+			m.list.lastRun = nil
 			m.phase = phaseArgs
-			m.showValidation = false
+			m.args.showValidation = false
 
 			if len(task.Args) > 0 {
-				m.argInputs = make([]argInput, len(task.Args))
+				m.args.inputs = make([]argInput, len(task.Args))
 				for i, def := range task.Args {
-					m.argInputs[i] = argInput{def: def, value: def.Default}
+					m.args.inputs[i] = argInput{def: def, value: def.Default}
 				}
-				m.argCursor = 0
+				m.args.cursor = 0
 			} else {
-				m.simpleArg = ""
+				m.args.simpleArg = ""
 			}
 		}
 
 	case tea.KeyBackspace:
-		if len(m.filter) > 0 {
-			m.filter = m.filter[:len(m.filter)-1]
-			m.filtered = filterTasks(m.tasks, m.filter)
-			m.cursor = 0
-			m.offset = 0
+		if len(m.list.filter) > 0 {
+			m.list.filter = m.list.filter[:len(m.list.filter)-1]
+			m.list.filtered = filterTasks(m.list.tasks, m.list.filter)
+			m.list.cursor = 0
+			m.list.offset = 0
 		}
 
 	case tea.KeyRunes:
 		ch := string(msg.Runes)
-		if ch == "q" && m.filter == "" {
+		if ch == "q" && m.list.filter == "" {
 			m.quitting = true
 			return m, tea.Quit
 		}
-		m.filter += ch
-		m.filtered = filterTasks(m.tasks, m.filter)
-		m.cursor = 0
-		m.offset = 0
+		m.list.filter += ch
+		m.list.filtered = filterTasks(m.list.tasks, m.list.filter)
+		m.list.cursor = 0
+		m.list.offset = 0
 	}
 
 	return m, nil
@@ -116,7 +116,7 @@ func (m Model) handleArgsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.isSimpleMode() {
+	if m.args.isSimpleMode() {
 		return m.handleSimpleArgsKey(msg)
 	}
 	return m.handleConfigArgsKey(msg)
@@ -125,19 +125,19 @@ func (m Model) handleArgsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleSimpleArgsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		m.collectedArgs = collectSimpleArgs(m.simpleArg)
+		m.args.collected = collectSimpleArgs(m.args.simpleArg)
 		return m, m.execTask()
 
 	case tea.KeyBackspace:
-		if len(m.simpleArg) > 0 {
-			m.simpleArg = m.simpleArg[:len(m.simpleArg)-1]
+		if len(m.args.simpleArg) > 0 {
+			m.args.simpleArg = m.args.simpleArg[:len(m.args.simpleArg)-1]
 		}
 
 	case tea.KeyRunes:
-		m.simpleArg += string(msg.Runes)
+		m.args.simpleArg += string(msg.Runes)
 
 	case tea.KeySpace:
-		m.simpleArg += " "
+		m.args.simpleArg += " "
 	}
 
 	return m, nil
@@ -146,38 +146,38 @@ func (m Model) handleSimpleArgsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleConfigArgsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		if m.missingRequired() {
-			m.showValidation = true
+		if m.args.missingRequired() {
+			m.args.showValidation = true
 			return m, nil
 		}
-		m.collectedArgs = m.collectConfigArgs()
+		m.args.collected = m.args.collectConfigArgs()
 		return m, m.execTask()
 
 	case tea.KeyTab, tea.KeyDown:
-		m.showValidation = false
-		if m.argCursor < len(m.argInputs)-1 {
-			m.argCursor++
+		m.args.showValidation = false
+		if m.args.cursor < len(m.args.inputs)-1 {
+			m.args.cursor++
 		}
 
 	case tea.KeyShiftTab, tea.KeyUp:
-		m.showValidation = false
-		if m.argCursor > 0 {
-			m.argCursor--
+		m.args.showValidation = false
+		if m.args.cursor > 0 {
+			m.args.cursor--
 		}
 
 	case tea.KeyBackspace:
-		v := m.argInputs[m.argCursor].value
+		v := m.args.inputs[m.args.cursor].value
 		if len(v) > 0 {
-			m.argInputs[m.argCursor].value = v[:len(v)-1]
+			m.args.inputs[m.args.cursor].value = v[:len(v)-1]
 		}
 
 	case tea.KeyRunes:
-		m.argInputs[m.argCursor].value += string(msg.Runes)
-		m.showValidation = false
+		m.args.inputs[m.args.cursor].value += string(msg.Runes)
+		m.args.showValidation = false
 
 	case tea.KeySpace:
-		m.argInputs[m.argCursor].value += " "
-		m.showValidation = false
+		m.args.inputs[m.args.cursor].value += " "
+		m.args.showValidation = false
 	}
 
 	return m, nil
