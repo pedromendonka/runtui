@@ -2,22 +2,31 @@ package runner
 
 import (
 	"os/exec"
+
+	"github.com/pedromendonka/runtui/parser"
 )
 
-// BuildCmd constructs an exec.Cmd for the given task.
-// The runner is the binary (e.g. "npm", "make").
-// The subcmd is the runner subcommand (e.g. "run" for npm, empty for make).
-// The script is the task/target name.
-// args are additional arguments to pass after the script name.
-func BuildCmd(runner, subcmd, script string, args []string) *exec.Cmd {
+// BuildCmd constructs an exec.Cmd for a task using the given RunContext.
+// The script is the task/target name. args are additional arguments to
+// pass to the task (typically collected from the arg prompt).
+//
+// Assembly:
+//
+//	<Binary> [Subcmd] <script> [ArgSeparator] [args...]
+//
+// For npm: "npm run test -- --coverage"
+// For make: "make test --coverage"
+func BuildCmd(ctx parser.RunContext, script string, args []string) *exec.Cmd {
 	var cmdArgs []string
-	if subcmd != "" {
-		cmdArgs = append(cmdArgs, subcmd)
+	if ctx.Subcmd != "" {
+		cmdArgs = append(cmdArgs, ctx.Subcmd)
 	}
 	cmdArgs = append(cmdArgs, script)
 	if len(args) > 0 {
-		cmdArgs = append(cmdArgs, "--")
+		if ctx.ArgSeparator != "" {
+			cmdArgs = append(cmdArgs, ctx.ArgSeparator)
+		}
 		cmdArgs = append(cmdArgs, args...)
 	}
-	return exec.Command(runner, cmdArgs...)
+	return exec.Command(ctx.Binary, cmdArgs...)
 }

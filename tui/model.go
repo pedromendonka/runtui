@@ -35,11 +35,14 @@ type execResult struct {
 	exitCode int // -1 if not an ExitError
 }
 
-func newExecResult(taskName, runner string, args []string, err error) execResult {
-	// Build the display command.
-	parts := []string{runner, "run", taskName}
+func newExecResult(taskName string, ctx parser.RunContext, args []string, err error) execResult {
+	// Build the display command from the RunContext, not hardcoded npm.
+	parts := append([]string{}, ctx.DisplayPrefix...)
+	parts = append(parts, taskName)
 	if len(args) > 0 {
-		parts = append(parts, "--")
+		if ctx.ArgSeparator != "" {
+			parts = append(parts, ctx.ArgSeparator)
+		}
 		parts = append(parts, args...)
 	}
 
@@ -85,7 +88,7 @@ type Model struct {
 	header    string
 	nameWidth int
 	descWidth int
-	runner    string
+	runCtx    parser.RunContext
 	info      bool
 	selected  *parser.Task
 	quitting  bool
@@ -101,8 +104,8 @@ type Model struct {
 }
 
 // New creates a Model ready to display the given tasks.
-// The runner is the package manager command (e.g. "npm", "pnpm").
-func New(tasks []parser.Task, header, runner string, info bool) Model {
+// The runCtx fully describes how to invoke a selected task.
+func New(tasks []parser.Task, header string, runCtx parser.RunContext, info bool) Model {
 	nw, dw := 0, 0
 	for _, t := range tasks {
 		if len(t.Name) > nw {
@@ -116,7 +119,7 @@ func New(tasks []parser.Task, header, runner string, info bool) Model {
 		tasks:     tasks,
 		filtered:  tasks,
 		header:    header,
-		runner:    runner,
+		runCtx:    runCtx,
 		info:      info,
 		nameWidth: nw,
 		descWidth: dw,
@@ -208,7 +211,7 @@ func collectSimpleArgs(raw string) []string {
 
 // execTask returns a tea.Cmd that runs the selected task as a subprocess.
 func (m Model) execTask() tea.Cmd {
-	cmd := runner.BuildCmd(m.runner, "run", m.selected.Name, m.collectedArgs)
+	cmd := runner.BuildCmd(m.runCtx, m.selected.Name, m.collectedArgs)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return execDoneMsg{err: err}
 	})
@@ -228,7 +231,7 @@ func (m Model) cancelToList() Model {
 
 // resetToList clears args state, records the execution result, and returns to the list.
 func (m Model) resetToList(err error) Model {
-	result := newExecResult(m.selected.Name, m.runner, m.collectedArgs, err)
+	result := newExecResult(m.selected.Name, m.runCtx, m.collectedArgs, err)
 	m.lastRun = &result
 	m.phase = phaseList
 	m.selected = nil

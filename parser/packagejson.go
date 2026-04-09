@@ -21,24 +21,41 @@ type runtuiTaskConfig struct {
 }
 
 // PackageJSON parses tasks from a package.json file.
-type PackageJSON struct{}
+// The runner is the package manager command (npm, yarn, pnpm, bun) that
+// should be used to execute scripts — typically chosen by the detector
+// from the presence of a lockfile.
+type PackageJSON struct {
+	runner string
+}
 
-func (p *PackageJSON) Parse(path string) ([]Task, error) {
+// NewPackageJSON returns a parser configured for the given package manager.
+func NewPackageJSON(runner string) *PackageJSON {
+	return &PackageJSON{runner: runner}
+}
+
+func (p *PackageJSON) Parse(path string) ([]Task, RunContext, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
+		return nil, RunContext{}, fmt.Errorf("reading %s: %w", path, err)
 	}
 	return p.parse(data)
 }
 
-func (p *PackageJSON) parse(data []byte) ([]Task, error) {
+func (p *PackageJSON) parse(data []byte) ([]Task, RunContext, error) {
+	runCtx := RunContext{
+		Binary:        p.runner,
+		Subcmd:        "run",
+		ArgSeparator:  "--",
+		DisplayPrefix: []string{p.runner, "run"},
+	}
+
 	var pkg packageJSON
 	if err := json.Unmarshal(data, &pkg); err != nil {
-		return nil, fmt.Errorf("parsing package.json: %w", err)
+		return nil, runCtx, fmt.Errorf("parsing package.json: %w", err)
 	}
 
 	if len(pkg.Scripts) == 0 {
-		return nil, nil
+		return nil, runCtx, nil
 	}
 
 	tasks := make([]Task, 0, len(pkg.Scripts))
@@ -58,5 +75,5 @@ func (p *PackageJSON) parse(data []byte) ([]Task, error) {
 		return strings.Compare(a.Name, b.Name)
 	})
 
-	return tasks, nil
+	return tasks, runCtx, nil
 }

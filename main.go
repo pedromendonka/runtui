@@ -49,23 +49,6 @@ func main() {
 
 	project := projects[0]
 
-	var p parser.Parser
-	switch project.Type {
-	case detector.TypePackageJSON:
-		p = &parser.PackageJSON{}
-	default:
-		fatal("unsupported project type: %s", project.Type)
-	}
-
-	tasks, err := p.Parse(project.Path)
-	if err != nil {
-		fatal("%v", err)
-	}
-
-	if len(tasks) == 0 {
-		fatal("no tasks found")
-	}
-
 	runner := project.Runner
 	if *runnerFlag != "" {
 		if !validRunners[*runnerFlag] {
@@ -74,8 +57,25 @@ func main() {
 		runner = *runnerFlag
 	}
 
+	var p parser.Parser
+	switch project.Type {
+	case detector.TypePackageJSON:
+		p = parser.NewPackageJSON(runner)
+	default:
+		fatal("unsupported project type: %s", project.Type)
+	}
+
+	tasks, runCtx, err := p.Parse(project.Path)
+	if err != nil {
+		fatal("%v", err)
+	}
+
+	if len(tasks) == 0 {
+		fatal("no tasks found")
+	}
+
 	header := fmt.Sprintf("%s (%s)", project.Type, runner)
-	m := tui.New(tasks, header, runner, *infoFlag)
+	m := tui.New(tasks, header, runCtx, *infoFlag)
 
 	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
 		fatal("%v", err)

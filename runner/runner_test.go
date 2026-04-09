@@ -2,10 +2,27 @@ package runner
 
 import (
 	"testing"
+
+	"github.com/pedromendonka/runtui/parser"
+)
+
+var (
+	npmCtx = parser.RunContext{
+		Binary:        "npm",
+		Subcmd:        "run",
+		ArgSeparator:  "--",
+		DisplayPrefix: []string{"npm", "run"},
+	}
+	makeCtx = parser.RunContext{
+		Binary:        "make",
+		Subcmd:        "",
+		ArgSeparator:  "",
+		DisplayPrefix: []string{"make"},
+	}
 )
 
 func TestBuildCmdNoArgs(t *testing.T) {
-	cmd := BuildCmd("npm", "run", "dev", nil)
+	cmd := BuildCmd(npmCtx, "dev", nil)
 
 	if cmd.Path == "" {
 		t.Fatal("expected non-empty path")
@@ -13,49 +30,63 @@ func TestBuildCmdNoArgs(t *testing.T) {
 
 	args := cmd.Args[1:] // skip the binary name
 	expected := []string{"run", "dev"}
-	if len(args) != len(expected) {
-		t.Fatalf("args = %v, want %v", args, expected)
-	}
-	for i, want := range expected {
-		if args[i] != want {
-			t.Errorf("args[%d] = %q, want %q", i, args[i], want)
-		}
-	}
+	assertArgs(t, args, expected)
 }
 
 func TestBuildCmdWithArgs(t *testing.T) {
-	cmd := BuildCmd("pnpm", "run", "test", []string{"--coverage", "--watch"})
+	ctx := parser.RunContext{
+		Binary:        "pnpm",
+		Subcmd:        "run",
+		ArgSeparator:  "--",
+		DisplayPrefix: []string{"pnpm", "run"},
+	}
+	cmd := BuildCmd(ctx, "test", []string{"--coverage", "--watch"})
 
 	args := cmd.Args[1:]
 	expected := []string{"run", "test", "--", "--coverage", "--watch"}
-	if len(args) != len(expected) {
-		t.Fatalf("args = %v, want %v", args, expected)
-	}
-	for i, want := range expected {
-		if args[i] != want {
-			t.Errorf("args[%d] = %q, want %q", i, args[i], want)
-		}
-	}
+	assertArgs(t, args, expected)
 }
 
 func TestBuildCmdNoSubcmd(t *testing.T) {
-	cmd := BuildCmd("make", "", "build", nil)
+	cmd := BuildCmd(makeCtx, "build", nil)
 
 	args := cmd.Args[1:]
 	expected := []string{"build"}
-	if len(args) != len(expected) {
-		t.Fatalf("args = %v, want %v", args, expected)
-	}
-	if args[0] != "build" {
-		t.Errorf("args[0] = %q, want %q", args[0], "build")
-	}
+	assertArgs(t, args, expected)
+}
+
+func TestBuildCmdMakeWithArgs(t *testing.T) {
+	// Make has no ArgSeparator — args are passed directly.
+	cmd := BuildCmd(makeCtx, "build", []string{"VERBOSE=1"})
+
+	args := cmd.Args[1:]
+	expected := []string{"build", "VERBOSE=1"}
+	assertArgs(t, args, expected)
 }
 
 func TestBuildCmdDifferentRunners(t *testing.T) {
 	for _, runner := range []string{"npm", "yarn", "pnpm", "bun"} {
-		cmd := BuildCmd(runner, "run", "build", nil)
+		ctx := parser.RunContext{
+			Binary:        runner,
+			Subcmd:        "run",
+			ArgSeparator:  "--",
+			DisplayPrefix: []string{runner, "run"},
+		}
+		cmd := BuildCmd(ctx, "build", nil)
 		if cmd.Args[0] != runner {
 			t.Errorf("runner %s: Args[0] = %q", runner, cmd.Args[0])
+		}
+	}
+}
+
+func assertArgs(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("args[%d] = %q, want %q", i, got[i], w)
 		}
 	}
 }

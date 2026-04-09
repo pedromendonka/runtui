@@ -1,8 +1,11 @@
 package parser
 
 import (
+	"reflect"
 	"testing"
 )
+
+func newPnp() *PackageJSON { return NewPackageJSON("npm") }
 
 func TestParseScripts(t *testing.T) {
 	input := `{
@@ -13,8 +16,7 @@ func TestParseScripts(t *testing.T) {
 		}
 	}`
 
-	p := &PackageJSON{}
-	tasks, err := p.parse([]byte(input))
+	tasks, ctx, err := newPnp().parse([]byte(input))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,6 +38,17 @@ func TestParseScripts(t *testing.T) {
 		if tasks[i].Command != want.cmd {
 			t.Errorf("task[%d].Command = %q, want %q", i, tasks[i].Command, want.cmd)
 		}
+	}
+
+	// RunContext should reflect npm defaults.
+	wantCtx := RunContext{
+		Binary:        "npm",
+		Subcmd:        "run",
+		ArgSeparator:  "--",
+		DisplayPrefix: []string{"npm", "run"},
+	}
+	if !reflect.DeepEqual(ctx, wantCtx) {
+		t.Errorf("ctx = %+v, want %+v", ctx, wantCtx)
 	}
 }
 
@@ -59,8 +72,7 @@ func TestParseWithRuntuiConfig(t *testing.T) {
 		}
 	}`
 
-	p := &PackageJSON{}
-	tasks, err := p.parse([]byte(input))
+	tasks, _, err := newPnp().parse([]byte(input))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,10 +110,7 @@ func TestParseWithRuntuiConfig(t *testing.T) {
 }
 
 func TestParseEmptyScripts(t *testing.T) {
-	input := `{"scripts": {}}`
-
-	p := &PackageJSON{}
-	tasks, err := p.parse([]byte(input))
+	tasks, _, err := newPnp().parse([]byte(`{"scripts": {}}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,10 +120,7 @@ func TestParseEmptyScripts(t *testing.T) {
 }
 
 func TestParseNoScripts(t *testing.T) {
-	input := `{"name": "my-project"}`
-
-	p := &PackageJSON{}
-	tasks, err := p.parse([]byte(input))
+	tasks, _, err := newPnp().parse([]byte(`{"name": "my-project"}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -124,8 +130,7 @@ func TestParseNoScripts(t *testing.T) {
 }
 
 func TestParseMalformedJSON(t *testing.T) {
-	p := &PackageJSON{}
-	_, err := p.parse([]byte(`{invalid`))
+	_, _, err := newPnp().parse([]byte(`{invalid`))
 	if err == nil {
 		t.Fatal("expected error for malformed JSON")
 	}
@@ -139,8 +144,7 @@ func TestParseRuntuiConfigForUnknownScript(t *testing.T) {
 		}
 	}`
 
-	p := &PackageJSON{}
-	tasks, err := p.parse([]byte(input))
+	tasks, _, err := newPnp().parse([]byte(input))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,5 +153,18 @@ func TestParseRuntuiConfigForUnknownScript(t *testing.T) {
 	}
 	if tasks[0].Description != "" {
 		t.Errorf("dev should have no description, got %q", tasks[0].Description)
+	}
+}
+
+func TestParseDifferentRunners(t *testing.T) {
+	for _, runner := range []string{"npm", "yarn", "pnpm", "bun"} {
+		p := NewPackageJSON(runner)
+		_, ctx, err := p.parse([]byte(`{"scripts": {"dev": "next dev"}}`))
+		if err != nil {
+			t.Fatalf("runner %s: %v", runner, err)
+		}
+		if ctx.Binary != runner {
+			t.Errorf("runner %s: ctx.Binary = %q", runner, ctx.Binary)
+		}
 	}
 }
