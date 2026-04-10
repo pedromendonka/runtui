@@ -4,7 +4,7 @@ VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "d
 LDFLAGS   := -s -w -X main.version=$(VERSION)
 GOFLAGS   := -trimpath
 
-.PHONY: all build install run run-info test lint vet fmt tidy clean setup release-dry help
+.PHONY: all build install run run-info test lint vet fmt fmt-check tidy clean setup release-dry help
 
 all: build ## Build the binary (default)
 
@@ -28,8 +28,17 @@ test: ## Run all unit tests with colored, grouped output (falls back to go test 
 vet: ## Run go vet — catches common mistakes like wrong printf formats or unreachable code
 	go vet ./...
 
-lint: vet tidy-check ## Run go vet + staticcheck + tidy check — deeper analysis for bugs, performance, and style issues
+lint: vet fmt-check tidy-check ## Run go vet + format check + staticcheck + tidy check — deeper analysis for bugs, performance, and style issues
 	@which staticcheck > /dev/null 2>&1 && staticcheck ./... || echo "staticcheck not installed — skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"
+
+fmt-check: ## Fail if any Go files are not formatted (used by lint)
+	@UNFORMATTED=$$(gofmt -l .); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "ERROR: the following files are not formatted:"; \
+		echo "$$UNFORMATTED"; \
+		echo "Run 'make fmt' to fix."; \
+		exit 1; \
+	fi
 
 fmt: ## Auto-format all Go files with gofmt (simplifies code too, e.g. removes unnecessary parens)
 	gofmt -s -w .

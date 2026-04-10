@@ -58,8 +58,11 @@ Run `make help` to see all available commands:
 | `make run-info` | Build and run with `--info` flag |
 | `make test` | Run all tests |
 | `make vet` | Run `go vet` |
-| `make lint` | Run vet + staticcheck (if installed) |
+| `make lint` | Run vet + format check + staticcheck + tidy check |
 | `make fmt` | Format all Go files |
+| `make fmt-check` | Fail if any Go files are not formatted |
+| `make tidy` | Run `go mod tidy` and verify integrity |
+| `make tidy-check` | Fail if `go.mod`/`go.sum` would change after tidy |
 | `make clean` | Remove build artifacts |
 | `make setup` | Install git hooks (required once after cloning) |
 | `make release-dry` | Dry-run GoReleaser locally |
@@ -68,16 +71,20 @@ Run `make help` to see all available commands:
 
 ```
 runtui/
-  main.go                 Entry point, flag parsing, orchestration
+  main.go                 Thin entry point, delegates to app.Run
+  app/
+    app.go                 Orchestration: flag parsing, detection, parser selection, TUI boot
+    app_test.go            End-to-end behavior tests
+    registry.go            Parser factory registry (maps project types to parsers)
   detector/
     detector.go            Scan cwd for config files + detect package manager from lockfiles
     detector_test.go
   parser/
-    parser.go              Parser interface, Task and ArgDef types
+    parser.go              Parser interface, Task, ArgDef, and RunContext types
     packagejson.go         Parse package.json scripts + runtui config block
     packagejson_test.go
   runner/
-    runner.go              Build exec.Cmd from runner, subcmd, script, and args
+    runner.go              Build exec.Cmd from RunContext, script, and args
     runner_test.go
   tui/
     model.go               Bubble Tea model, phase state machine, execution lifecycle
@@ -92,12 +99,14 @@ runtui/
 
 ```
 main.go
-  ├── detector.Detect()     → []Project (type, path, runner)
-  ├── parser.Parse()        → []Task (name, command, description, args)
-  └── tui.New() + tea.Run() → interactive loop
-        ├── phaseList        → browse/filter tasks
-        ├── phaseArgs        → collect arguments (simple or config-driven)
-        └── tea.ExecProcess  → run command, resume TUI on completion
+  └── app.Run()               orchestration, flag parsing
+        ├── detector.Detect()     → []Project (type, path, runner)
+        ├── parserFor()           → parser.Parser (via registry)
+        ├── parser.Parse()        → []Task, RunContext
+        └── tui.New() + tea.Run() → interactive loop
+              ├── phaseList        → browse/filter tasks
+              ├── phaseArgs        → collect arguments (simple or config-driven)
+              └── tea.ExecProcess  → run command, resume TUI on completion
 ```
 
 ### Key design decisions
@@ -123,23 +132,30 @@ Purple-to-teal gradient (`#7C3AED` -> `#6366F1` -> `#14B8A6`) with slate grays f
 
 ## Adding a new project type
 
-1. **Create a parser** -- add `parser/newtype.go` implementing `parser.Parser`. The `Parse(path) ([]Task, error)` method reads the config file and returns tasks.
-2. **Register in detector** -- add the config filename to `configFiles` in `detector/detector.go`.
-3. **Wire in main.go** -- add a `case` to the project type switch.
+1. **Create a parser** -- add `parser/newtype.go` implementing `parser.Parser`. The `Parse(path string) ([]Task, RunContext, error)` method reads the config file and returns tasks plus a `RunContext` describing how to invoke them.
+2. **Register in detector** -- add the config filename and a `ProjectType` constant to `detector/detector.go`.
+3. **Wire in registry** -- add a `parserFactory` entry in `app/registry.go` mapping the new `ProjectType` to the parser constructor.
 4. **Add tests** -- add `parser/newtype_test.go` and a test fixture in `testdata/`.
 
 Example for Makefile support:
 
 ```go
 // parser/makefile.go
-type Makefile struct{}
+type MakefileParser struct{}
 
-func (p *Makefile) Parse(path string) ([]Task, error) {
+func (p *MakefileParser) Parse(path string) ([]Task, RunContext, error) {
     // Parse make targets from Makefile
+    // RunContext: Binary="make", Subcmd="", ArgSeparator=""
 }
 ```
 
-The runner subcmd for make would be `""` (targets are passed directly: `make build`).
+```go
+// app/registry.go — register the new parser
+var parserRegistry = map[detector.ProjectType]parserFactory{
+    detector.TypePackageJSON: func(runner string) parser.Parser { return parser.NewPackageJSON(runner) },
+    detector.TypeMakefile:    func(_ string) parser.Parser { return &parser.MakefileParser{} },
+}
+```
 
 ## Code style
 

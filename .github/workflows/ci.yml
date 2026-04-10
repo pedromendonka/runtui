@@ -26,6 +26,17 @@ jobs:
           go-version: ${{ matrix.go }}
           check-latest: true
 
+      - name: Check formatting
+        shell: bash
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::The following files are not formatted:"
+            echo "$UNFORMATTED"
+            echo "Run 'make fmt' to fix."
+            exit 1
+          fi
+
       - name: Verify go.mod is tidy
         shell: bash
         run: |

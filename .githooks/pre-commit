@@ -12,7 +12,7 @@ if [ -n "$UNFORMATTED" ]; then
 fi
 
 echo "==> pre-commit: running go vet..."
-go vet ./parser/... ./runner/... ./detector/... ./tui/... .
+go vet ./...
 
 echo "==> pre-commit: building..."
 go build ./...
