@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -57,8 +58,7 @@ type execResult struct {
 }
 
 func newExecResult(taskName string, ctx parser.RunContext, args []string, err error) execResult {
-	// Build the display command from the RunContext, not hardcoded npm.
-	parts := append([]string{}, ctx.DisplayPrefix...)
+	parts := slices.Clone(ctx.DisplayPrefix)
 	parts = append(parts, taskName)
 	if len(args) > 0 {
 		if ctx.ArgSeparator != "" {

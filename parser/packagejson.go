@@ -3,9 +3,6 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"slices"
-	"strings"
 )
 
 // packageJSON mirrors the relevant fields of a package.json file.
@@ -34,9 +31,9 @@ func NewPackageJSON(runner string) *PackageJSON {
 }
 
 func (p *PackageJSON) Parse(path string) ([]Task, RunContext, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFile(path)
 	if err != nil {
-		return nil, RunContext{}, fmt.Errorf("reading %s: %w", path, err)
+		return nil, RunContext{}, err
 	}
 	return p.parse(data)
 }
@@ -71,9 +68,7 @@ func (p *PackageJSON) parse(data []byte) ([]Task, RunContext, error) {
 		tasks = append(tasks, task)
 	}
 
-	slices.SortFunc(tasks, func(a, b Task) int {
-		return strings.Compare(a.Name, b.Name)
-	})
+	sortTasks(tasks)
 
 	return tasks, runCtx, nil
 }

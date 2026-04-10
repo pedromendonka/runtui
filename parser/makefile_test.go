@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"os"
 	"testing"
 )
 
@@ -188,8 +187,4 @@ func taskNames(tasks []Task) []string {
 		names[i] = t.Name
 	}
 	return names
-}
-
-func TestMain(m *testing.M) {
-	os.Exit(m.Run())
 }

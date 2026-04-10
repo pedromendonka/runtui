@@ -3,10 +3,7 @@ package parser
 import (
 	"bufio"
 	"bytes"
-	"fmt"
-	"os"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -17,9 +14,9 @@ var targetLine = regexp.MustCompile(`^([a-zA-Z0-9_][a-zA-Z0-9_.-]*)\s*:`)
 type MakefileParser struct{}
 
 func (p *MakefileParser) Parse(path string) ([]Task, RunContext, error) {
-	data, err := os.ReadFile(path)
+	data, err := readFile(path)
 	if err != nil {
-		return nil, RunContext{}, fmt.Errorf("reading %s: %w", path, err)
+		return nil, RunContext{}, err
 	}
 	return p.parse(data)
 }
@@ -84,9 +81,7 @@ func (p *MakefileParser) parse(data []byte) ([]Task, RunContext, error) {
 		})
 	}
 
-	slices.SortFunc(tasks, func(a, b Task) int {
-		return strings.Compare(a.Name, b.Name)
-	})
+	sortTasks(tasks)
 
 	return tasks, runCtx, nil
 }

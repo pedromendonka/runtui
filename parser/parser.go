@@ -1,5 +1,29 @@
 package parser
 
+import (
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+)
+
+// readFile reads path and wraps any error with context. Shared by all parsers
+// so the boilerplate isn't duplicated in every Parse method.
+func readFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return data, nil
+}
+
+// sortTasks sorts tasks alphabetically by name.
+func sortTasks(tasks []Task) {
+	slices.SortFunc(tasks, func(a, b Task) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+}
+
 // Task represents a runnable task extracted from a project config file.
 type Task struct {
 	Name        string

@@ -234,7 +234,7 @@ func TestRunMultiProjectHint(t *testing.T) {
 }
 
 func TestParserForRegistered(t *testing.T) {
-	p, err := parserFor("package.json", "pnpm")
+	p, err := parserFor(detector.TypePackageJSON, "pnpm")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestParserForRegistered(t *testing.T) {
 }
 
 func TestParserForUnregistered(t *testing.T) {
-	_, err := parserFor("Cargo.toml", "")
+	_, err := parserFor(detector.ProjectType("Cargo.toml"), "")
 	if err == nil {
 		t.Fatal("expected error for unregistered type")
 	}
@@ -254,7 +254,7 @@ func TestParserForUnregistered(t *testing.T) {
 }
 
 func TestParserForMakefile(t *testing.T) {
-	p, err := parserFor("Makefile", "")
+	p, err := parserFor(detector.TypeMakefile, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
