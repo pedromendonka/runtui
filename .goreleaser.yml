@@ -27,6 +27,22 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+brews:
+  - name: runtui
+    repository:
+      owner: pedromendonka
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/pedromendonka/runtui"
+    description: "Interactive TUI for running project tasks"
+    license: "MIT"
+    install: |
+      bin.install "runtui"
+    test: |
+      system "#{bin}/runtui --version"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+
 changelog:
   sort: asc
   filters:

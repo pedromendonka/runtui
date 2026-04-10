@@ -33,7 +33,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Distributed
 
 ## Features
 
-- **Auto-detect project type** -- scans for `package.json` (more coming)
+- **Auto-detect project type** -- scans for `package.json` and `Makefile`
 - **Auto-detect package manager** -- picks `npm`, `yarn`, `pnpm`, or `bun` from your lockfile
 - **Tabular task list** -- tasks displayed in aligned columns with descriptions and commands
 - **Filterable** -- type `/` to filter tasks by substring
@@ -244,6 +244,8 @@ Usage: runtui [flags]
 Flags:
   --info           Show full commands without truncation
   --runner=NAME    Override detected package manager (npm, yarn, pnpm, bun)
+  --type=TYPE      Project type to use when multiple are detected (e.g. package.json, Makefile)
+  --version        Print version and exit
   --help           Show help
 ```
 
@@ -268,7 +270,7 @@ make help     # see all targets
 
 ## Roadmap
 
-- [ ] Makefile target parser
+- [x] Makefile target parser
 - [ ] Cargo.toml support
 - [ ] pyproject.toml (poetry/pdm) support
 - [ ] docker-compose.yml service runner
