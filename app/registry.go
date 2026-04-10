@@ -19,6 +19,9 @@ var parserRegistry = map[detector.ProjectType]parserFactory{
 	detector.TypePackageJSON: func(runner string) parser.Parser {
 		return parser.NewPackageJSON(runner)
 	},
+	detector.TypeMakefile: func(_ string) parser.Parser {
+		return &parser.MakefileParser{}
+	},
 }
 
 // parserFor returns the parser for the given project type, or an error

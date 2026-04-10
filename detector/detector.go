@@ -12,6 +12,7 @@ type ProjectType string
 
 const (
 	TypePackageJSON ProjectType = "package.json"
+	TypeMakefile    ProjectType = "Makefile"
 )
 
 // Project represents a detected project configuration file.
@@ -21,12 +22,15 @@ type Project struct {
 	Runner string // auto-detected package manager
 }
 
-// configFiles maps each project type to its expected filename.
+// configFiles maps each project type to its expected filename and default runner.
+// An empty Runner means auto-detect from lockfiles (package.json only).
 var configFiles = []struct {
 	Type     ProjectType
 	Filename string
+	Runner   string
 }{
-	{TypePackageJSON, "package.json"},
+	{TypePackageJSON, "package.json", ""},
+	{TypeMakefile, "Makefile", "make"},
 }
 
 // lockfileRunners maps lockfile names to their package manager command.
@@ -49,10 +53,14 @@ func Detect(dir string) ([]Project, error) {
 	for _, cf := range configFiles {
 		path := filepath.Join(dir, cf.Filename)
 		if _, err := os.Stat(path); err == nil {
+			runner := cf.Runner
+			if runner == "" {
+				runner = detectRunner(dir)
+			}
 			projects = append(projects, Project{
 				Type:   cf.Type,
 				Path:   path,
-				Runner: detectRunner(dir),
+				Runner: runner,
 			})
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("checking %s: %w", path, err)

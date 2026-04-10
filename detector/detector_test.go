@@ -75,6 +75,56 @@ func TestDetectRunnerFromLockfiles(t *testing.T) {
 	}
 }
 
+func TestDetectMakefile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("build:\n\tgo build .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(projects))
+	}
+	if projects[0].Type != TypeMakefile {
+		t.Errorf("type = %q, want %q", projects[0].Type, TypeMakefile)
+	}
+	if projects[0].Runner != "make" {
+		t.Errorf("runner = %q, want %q", projects[0].Runner, "make")
+	}
+}
+
+func TestDetectBothPackageJSONAndMakefile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("build:\n\tgo build .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Fatalf("expected 2 projects, got %d", len(projects))
+	}
+	// package.json is listed first (configFiles order).
+	if projects[0].Type != TypePackageJSON {
+		t.Errorf("projects[0].Type = %q, want %q", projects[0].Type, TypePackageJSON)
+	}
+	if projects[1].Type != TypeMakefile {
+		t.Errorf("projects[1].Type = %q, want %q", projects[1].Type, TypeMakefile)
+	}
+	// Makefile runner is always "make", not auto-detected from lockfiles.
+	if projects[1].Runner != "make" {
+		t.Errorf("Makefile runner = %q, want %q", projects[1].Runner, "make")
+	}
+}
+
 func TestDetectLockfilePriority(t *testing.T) {
 	dir := t.TempDir()
 	// Create package.json + both bun and npm lockfiles — bun should win (checked first).

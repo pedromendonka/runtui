@@ -124,11 +124,21 @@ func TestParserForRegistered(t *testing.T) {
 }
 
 func TestParserForUnregistered(t *testing.T) {
-	_, err := parserFor("Makefile", "")
+	_, err := parserFor("Cargo.toml", "")
 	if err == nil {
 		t.Fatal("expected error for unregistered type")
 	}
 	if !strings.Contains(err.Error(), "unsupported project type") {
 		t.Errorf("error = %q, want unsupported project type", err.Error())
+	}
+}
+
+func TestParserForMakefile(t *testing.T) {
+	p, err := parserFor("Makefile", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p == nil {
+		t.Fatal("parser is nil")
 	}
 }
