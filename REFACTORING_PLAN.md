@@ -105,16 +105,12 @@
 
 ## Summary
 
-| Phase | Description                         | Effort | Depends on |
-|-------|-------------------------------------|--------|------------|
-| 1     | Land blocked community health files | S      | None       |
-| 2     | Makefile parser implementation      | M      | 1          |
-| 3     | Multi-project selection (`--type`)  | M      | 2          |
-| 4     | GoReleaser Homebrew tap config      | S      | 2          |
-| 5     | Docs refresh + continuation plan    | S      | 3, 4       |
+| Phase | Description                         | Effort | Status |
+|-------|-------------------------------------|--------|--------|
+| 1     | Land blocked community health files | S      | Done   |
+| 2     | Makefile parser implementation      | M      | Done   |
+| 3     | Multi-project selection (`--type`)  | M      | Done   |
+| 4     | GoReleaser Homebrew tap config      | S      | Done   |
+| 5     | Docs refresh + continuation plan    | S      | Done   |
 
----
-
-## How to resume
-
-If this plan is interrupted, pick up from the first phase whose commit message is **not** in `git log --oneline`. All phases are independently committable — the codebase is in a working state after each one.
+All phases completed 2026-04-10. See [ROADMAP.md](ROADMAP.md) for what's next.

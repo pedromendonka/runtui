@@ -52,7 +52,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Distributed
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew tap pedromendonka/runtui
+brew tap pedromendonka/tap
 brew install runtui
 ```
 
@@ -79,6 +79,9 @@ runtui --info
 
 # Override detected package manager
 runtui --runner=pnpm
+
+# Force project type when both package.json and Makefile exist
+runtui --type=Makefile
 ```
 
 ### Keyboard shortcuts
@@ -194,6 +197,30 @@ Tasks **without** a `runtui.args` config get a simple free-form prompt:
   Arguments: --coverage --watch│
 
   enter run (empty to skip)  ·  esc back
+```
+
+---
+
+## Makefile support
+
+runtui parses Makefile targets and uses `## comment` annotations as descriptions — the same self-documenting pattern used by many projects:
+
+```makefile
+build: ## Compile the binary
+	go build -o bin/app .
+
+test: ## Run all tests
+	go test ./...
+
+lint: vet fmt-check ## Run all linters
+```
+
+If any targets have `##` descriptions, only those are shown (the curated public API). If none have descriptions, all targets are listed.
+
+When both `package.json` and `Makefile` exist in the same directory, runtui picks `package.json` by default and prints a hint:
+
+```
+runtui: also detected Makefile — use --type=Makefile to switch
 ```
 
 ---

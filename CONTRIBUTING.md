@@ -83,6 +83,8 @@ runtui/
     parser.go              Parser interface, Task, ArgDef, and RunContext types
     packagejson.go         Parse package.json scripts + runtui config block
     packagejson_test.go
+    makefile.go            Parse Makefile targets + ## descriptions
+    makefile_test.go
   runner/
     runner.go              Build exec.Cmd from RunContext, script, and args
     runner_test.go
@@ -92,7 +94,8 @@ runtui/
     view.go                Render banner, task table, args form, exec results
     styles.go              Lip Gloss color palette and style definitions
   testdata/
-    package.json           Sample project fixture with runtui config
+    package.json           Sample package.json fixture with runtui config
+    Makefile               Sample Makefile fixture with ## descriptions
 ```
 
 ### Data flow
@@ -112,7 +115,7 @@ main.go
 ### Key design decisions
 
 - **Bubble Tea Elm architecture** -- model is a value type, `Update` returns a new model, `View` is a pure function of state.
-- **Interfaces at the package level** -- `parser.Parser` defines the contract; each project type (package.json, future Makefile, etc.) implements it.
+- **Interfaces at the package level** -- `parser.Parser` defines the contract; each project type (package.json, Makefile, etc.) implements it.
 - **`runner.BuildCmd` takes a subcmd parameter** -- `"run"` for npm/yarn/pnpm/bun, `""` for make, making it extensible to future project types.
 - **`tea.ExecProcess` for terminal passthrough** -- the TUI suspends, gives the subprocess full stdin/stdout/stderr, then resumes.
 - **`--runner` validated against an allow-list** -- prevents arbitrary command execution.
@@ -137,24 +140,31 @@ Purple-to-teal gradient (`#7C3AED` -> `#6366F1` -> `#14B8A6`) with slate grays f
 3. **Wire in registry** -- add a `parserFactory` entry in `app/registry.go` mapping the new `ProjectType` to the parser constructor.
 4. **Add tests** -- add `parser/newtype_test.go` and a test fixture in `testdata/`.
 
-Example for Makefile support:
+For a real example, see how Makefile support was added: `parser/makefile.go`, `detector/detector.go` (`TypeMakefile`), and `app/registry.go`.
+
+Example for a hypothetical Cargo.toml parser:
 
 ```go
-// parser/makefile.go
-type MakefileParser struct{}
+// parser/cargo.go
+type CargoParser struct{}
 
-func (p *MakefileParser) Parse(path string) ([]Task, RunContext, error) {
-    // Parse make targets from Makefile
-    // RunContext: Binary="make", Subcmd="", ArgSeparator=""
+func (p *CargoParser) Parse(path string) ([]Task, RunContext, error) {
+    // Parse [scripts] or known cargo commands from Cargo.toml
+    // RunContext: Binary="cargo", Subcmd="", ArgSeparator="--"
 }
 ```
 
 ```go
-// app/registry.go — register the new parser
-var parserRegistry = map[detector.ProjectType]parserFactory{
-    detector.TypePackageJSON: func(runner string) parser.Parser { return parser.NewPackageJSON(runner) },
-    detector.TypeMakefile:    func(_ string) parser.Parser { return &parser.MakefileParser{} },
-}
+// detector/detector.go — add the project type
+const TypeCargoToml ProjectType = "Cargo.toml"
+
+// configFiles — add the entry with default runner
+{TypeCargoToml, "Cargo.toml", "cargo"},
+```
+
+```go
+// app/registry.go — register the parser
+detector.TypeCargoToml: func(_ string) parser.Parser { return &parser.CargoParser{} },
 ```
 
 ## Code style
@@ -162,7 +172,7 @@ var parserRegistry = map[detector.ProjectType]parserFactory{
 - **Go 1.26 idioms** -- use `errors.AsType[T]()` for type-safe error assertions, `slices.SortFunc` for sorting, `strings.Builder` for string construction.
 - **No unnecessary abstractions** -- don't add helpers, wrappers, or interfaces until there's a second consumer.
 - **Error wrapping** -- use `fmt.Errorf("context: %w", err)` to wrap errors with context.
-- **No hardcoded strings** -- runner names are validated against `validRunners` in `main.go`.
+- **No hardcoded strings** -- runner names are validated against `validRunners` in `app/app.go`.
 
 ## Testing
 
@@ -171,9 +181,11 @@ make test
 ```
 
 Tests cover:
-- `parser/` -- script parsing, runtui config, empty/malformed JSON, unknown script configs
+- `app/` -- flag parsing, project selection, `--type` flag, registry wiring, error paths
+- `parser/` -- package.json scripts + runtui config, Makefile targets + `##` descriptions, edge cases
 - `runner/` -- command construction with/without args, with/without subcmd, different runners
-- `detector/` -- project detection, lockfile-based runner detection, priority ordering
+- `detector/` -- project detection, lockfile-based runner detection, multi-project, priority ordering
+- `tui/` -- navigation, filtering, argument collection (simple + config-driven), state transitions
 
 ## Releasing
 

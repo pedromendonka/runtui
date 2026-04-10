@@ -67,13 +67,13 @@ Built with **Bubble Tea** (TUI framework) and distributed as a single binary.
 
 ## Supported Project Types
 
-| Priority | Config File | Task Source | Runner |
-|----------|------------|-------------|--------|
-| Phase 1 | `package.json` | `scripts` object | npm / yarn / pnpm / bun |
-| Phase 2 | `Makefile` | make targets | make |
-| Phase 3 | `Cargo.toml` | cargo commands | cargo |
-| Phase 4 | `pyproject.toml` | poetry/pdm scripts | poetry / pdm |
-| Phase 5 | `docker-compose.yml` | services | docker compose |
+| Status | Config File | Task Source | Runner |
+|--------|------------|-------------|--------|
+| Done | `package.json` | `scripts` object | npm / yarn / pnpm / bun |
+| Done | `Makefile` | make targets | make |
+| Planned | `Cargo.toml` | cargo commands | cargo |
+| Planned | `pyproject.toml` | poetry/pdm scripts | poetry / pdm |
+| Planned | `docker-compose.yml` | services | docker compose |
 | Future | `Taskfile.yml` | tasks | task |
 | Future | `justfile` | recipes | just |
 
@@ -90,38 +90,51 @@ Built with **Bubble Tea** (TUI framework) and distributed as a single binary.
 ### Project Structure
 ```
 runtui/
-├── main.go                 # Entry point, flag parsing, launch TUI
+├── main.go                 # Thin entry point, delegates to app.Run
 ├── go.mod
 ├── go.sum
+├── app/
+│   ├── app.go              # Orchestration: flags, detection, parser selection, TUI boot
+│   ├── app_test.go
+│   └── registry.go         # Parser factory registry (maps project types to parsers)
 ├── detector/
-│   └── detector.go         # Auto-detect project type from current dir
+│   ├── detector.go         # Auto-detect project type + package manager from lockfiles
+│   └── detector_test.go
 ├── parser/
-│   ├── parser.go           # Common interface for all parsers
+│   ├── parser.go           # Parser interface, Task, ArgDef, RunContext types
 │   ├── packagejson.go      # Parse package.json scripts + runtui config
-│   └── makefile.go         # Parse Makefile targets
+│   ├── packagejson_test.go
+│   ├── makefile.go         # Parse Makefile targets + ## descriptions
+│   └── makefile_test.go
 ├── runner/
-│   └── runner.go           # Execute tasks via os/exec
+│   ├── runner.go           # Build exec.Cmd from RunContext, script, and args
+│   └── runner_test.go
 ├── tui/
 │   ├── model.go            # Bubble Tea model (state)
 │   ├── update.go           # Bubble Tea update (handle events)
+│   ├── update_test.go
 │   ├── view.go             # Bubble Tea view (render UI)
+│   ├── model_test.go
 │   └── styles.go           # Lip Gloss styles
-├── cache/
-│   └── cache.go            # Rerun cache (last command per project)
+├── testdata/
+│   ├── package.json        # Sample package.json fixture with runtui config
+│   └── Makefile            # Sample Makefile fixture with ## descriptions
 ├── .goreleaser.yml
 ├── .github/
 │   └── workflows/
-│       └── release.yml     # GitHub Action for GoReleaser
+│       ├── ci.yml          # CI: test, lint, vet across OS matrix
+│       └── release.yml     # GoReleaser on version tags
 ├── PLAN.md                 # This file
 ├── README.md
+├── CONTRIBUTING.md
 └── LICENSE
 ```
 
-### Key Interface
+### Key Interfaces
 ```go
 // Every project type implements this
 type Parser interface {
-    Parse(path string) ([]Task, *Config, error)
+    Parse(path string) ([]Task, RunContext, error)
 }
 
 type Task struct {
@@ -136,6 +149,15 @@ type ArgDef struct {
     Required bool
     Hint     string
     Default  string
+}
+
+// RunContext describes how to invoke a task (so TUI/runner don't need
+// to know whether the project is npm, make, cargo, etc.)
+type RunContext struct {
+    Binary        string   // e.g. "npm", "make"
+    Subcmd        string   // e.g. "run" for npm, "" for make
+    ArgSeparator  string   // e.g. "--" for npm, "" for make
+    DisplayPrefix []string // e.g. ["npm", "run"] or ["make"]
 }
 ```
 
@@ -156,8 +178,8 @@ runtui --type=makefile      # Force project type detection
 ## Distribution Plan (in priority order)
 
 ### Step 1: GitHub Repository
-- Create `github.com/<username>/runtui`
-- Module path in `go.mod` must match: `module github.com/<username>/runtui`
+- Create `github.com/pedromendonka/runtui`
+- Module path in `go.mod` must match: `module github.com/pedromendonka/runtui`
 - `main.go` at repo root so `go install` works
 
 ### Step 2: GoReleaser + GitHub Actions
@@ -196,28 +218,28 @@ jobs:
 ### Step 3: go install
 Once repo is public, this works immediately:
 ```bash
-go install github.com/<username>/runtui@latest
+go install github.com/pedromendonka/runtui@latest
 ```
 No extra setup needed.
 
 ### Step 4: Homebrew Tap
-- Create a separate repo: `github.com/<username>/homebrew-runtui`
+- Create a separate repo: `github.com/pedromendonka/homebrew-runtui`
 - Add `brews` section to `.goreleaser.yml`:
 
 ```yaml
 brews:
   - name: runtui
-    homepage: https://github.com/<username>/runtui
+    homepage: https://github.com/pedromendonka/runtui
     description: "Interactive TUI for running project tasks"
     license: "MIT"
     repository:
-      owner: <username>
+      owner: pedromendonka
       name: homebrew-runtui
 ```
 
 GoReleaser auto-updates the formula on each release. Users install with:
 ```bash
-brew tap <username>/runtui
+brew tap pedromendonka/runtui
 brew install runtui
 ```
 
@@ -296,29 +318,30 @@ Publish to npm under your existing account.
 
 ## Development Milestones
 
-### v0.1.0 — MVP
-- [ ] package.json parser (scripts + descriptions)
-- [ ] Bubble Tea list with arrow navigation
-- [ ] Fuzzy search/filter
-- [ ] Simple "Arguments (enter to skip)" prompt
-- [ ] Execute selected task via os/exec
-- [ ] GoReleaser + GitHub Actions setup
+### v0.1.0 — MVP (done)
+- [x] package.json parser (scripts + descriptions)
+- [x] Bubble Tea list with arrow navigation
+- [x] Fuzzy search/filter
+- [x] Simple "Arguments (enter to skip)" prompt
+- [x] Execute selected task via os/exec
+- [x] GoReleaser + GitHub Actions setup
 
-### v0.2.0 — Args & Config
-- [ ] Config-driven argument definitions (`runtui.args` in package.json)
-- [ ] Structured multi-field argument prompts
+### v0.2.0 — Args & Config (done)
+- [x] Config-driven argument definitions (`runtui.args` in package.json)
+- [x] Structured multi-field argument prompts
 - [ ] Rerun cache + `runtui rerun` shorthand
-- [ ] `--info` flag to show full commands
+- [x] `--info` flag to show full commands
 
-### v0.3.0 — Makefile Support
-- [ ] Makefile target parser
-- [ ] Auto-detection (package.json vs Makefile)
-- [ ] Selector when both are present
+### v0.3.0 — Makefile Support (done)
+- [x] Makefile target parser (with `##` description extraction)
+- [x] Auto-detection (package.json vs Makefile)
+- [x] `--type` flag for explicit project selection
+- [x] Homebrew tap config (GoReleaser brews section)
 
 ### v0.4.0 — Distribution
-- [ ] Homebrew tap with GoReleaser auto-update
+- [ ] Homebrew tap repo (`homebrew-tap`) + first tagged release
 - [ ] npm wrapper package
-- [ ] README with install instructions + demo GIF
+- [ ] README with demo GIF
 
 ### v0.5.0 — Ecosystem Expansion
 - [ ] Cargo.toml support
@@ -326,9 +349,10 @@ Publish to npm under your existing account.
 - [ ] docker-compose.yml support
 
 ### v1.0.0 — Stable
-- [ ] Multi-runner auto-detection (npm/yarn/pnpm/bun via lockfile)
+- [x] Multi-runner auto-detection (npm/yarn/pnpm/bun via lockfile)
 - [ ] Multi-select to run several tasks in sequence
 - [ ] Shell completions
+- [ ] Rerun cache + `runtui rerun`
 - [ ] Polished error handling and edge cases
 
 ---
