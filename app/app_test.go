@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pedromendonka/runtui/detector"
 )
 
 // withCwd runs f inside dir, restoring the previous working directory
@@ -111,6 +113,124 @@ func TestRunUnknownFlag(t *testing.T) {
 	if code != ExitError {
 		t.Errorf("exit code = %d, want %d", code, ExitError)
 	}
+}
+
+func TestSelectProjectDefault(t *testing.T) {
+	projects := []detector.Project{
+		{Type: detector.TypePackageJSON, Path: "package.json", Runner: "npm"},
+		{Type: detector.TypeMakefile, Path: "Makefile", Runner: "make"},
+	}
+	p, err := selectProject(projects, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != detector.TypePackageJSON {
+		t.Errorf("type = %q, want %q (first by priority)", p.Type, detector.TypePackageJSON)
+	}
+}
+
+func TestSelectProjectByType(t *testing.T) {
+	projects := []detector.Project{
+		{Type: detector.TypePackageJSON, Path: "package.json", Runner: "npm"},
+		{Type: detector.TypeMakefile, Path: "Makefile", Runner: "make"},
+	}
+	p, err := selectProject(projects, "Makefile")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != detector.TypeMakefile {
+		t.Errorf("type = %q, want %q", p.Type, detector.TypeMakefile)
+	}
+}
+
+func TestSelectProjectCaseInsensitive(t *testing.T) {
+	projects := []detector.Project{
+		{Type: detector.TypeMakefile, Path: "Makefile", Runner: "make"},
+	}
+	p, err := selectProject(projects, "makefile")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != detector.TypeMakefile {
+		t.Errorf("type = %q, want %q", p.Type, detector.TypeMakefile)
+	}
+}
+
+func TestSelectProjectNotFound(t *testing.T) {
+	projects := []detector.Project{
+		{Type: detector.TypePackageJSON, Path: "package.json", Runner: "npm"},
+	}
+	_, err := selectProject(projects, "Makefile")
+	if err == nil {
+		t.Fatal("expected error for missing type")
+	}
+	if !strings.Contains(err.Error(), "no \"Makefile\" project found") {
+		t.Errorf("error = %q, want no-project-found message", err.Error())
+	}
+}
+
+func TestRunTypeFlagSelectsMakefile(t *testing.T) {
+	dir := t.TempDir()
+	// package.json with scripts (would normally be selected first).
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"dev":"echo hi"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Empty Makefile (no targets → "no tasks found").
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	withCwd(t, dir, func() {
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"--type=Makefile"}, &stdout, &stderr, "dev")
+
+		if code != ExitError {
+			t.Errorf("exit code = %d, want %d", code, ExitError)
+		}
+		// Should get "no tasks found" from the Makefile parser, not launch package.json TUI.
+		if !strings.Contains(stderr.String(), "no tasks found") {
+			t.Errorf("stderr = %q, want no-tasks message from Makefile", stderr.String())
+		}
+	})
+}
+
+func TestRunTypeFlagNotFound(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	withCwd(t, dir, func() {
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"--type=Makefile"}, &stdout, &stderr, "dev")
+
+		if code != ExitError {
+			t.Errorf("exit code = %d, want %d", code, ExitError)
+		}
+		if !strings.Contains(stderr.String(), "no \"Makefile\" project found") {
+			t.Errorf("stderr = %q, want type-not-found message", stderr.String())
+		}
+	})
+}
+
+func TestRunMultiProjectHint(t *testing.T) {
+	dir := t.TempDir()
+	// package.json with no scripts → "no tasks found", but should still hint about Makefile.
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"test"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("build:\n\tgo build .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	withCwd(t, dir, func() {
+		var stdout, stderr bytes.Buffer
+		Run(nil, &stdout, &stderr, "dev")
+
+		if !strings.Contains(stderr.String(), "also detected Makefile") {
+			t.Errorf("stderr = %q, want multi-project hint", stderr.String())
+		}
+	})
 }
 
 func TestParserForRegistered(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pedromendonka/runtui/detector"
@@ -39,6 +40,7 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	fs.SetOutput(stderr)
 
 	runnerFlag := fs.String("runner", "", "override detected package manager (npm, yarn, pnpm, bun)")
+	typeFlag := fs.String("type", "", "project type to use when multiple are detected (e.g. package.json, Makefile)")
 	infoFlag := fs.Bool("info", false, "show full commands without truncation")
 	versionFlag := fs.Bool("version", false, "print version and exit")
 
@@ -73,10 +75,24 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return ExitError
 	}
 
-	project := projects[0]
+	project, err := selectProject(projects, *typeFlag)
+	if err != nil {
+		fmt.Fprintf(stderr, "runtui: %v\n", err)
+		return ExitError
+	}
 
+	// Hint about other detected project types.
+	if len(projects) > 1 && *typeFlag == "" {
+		for _, p := range projects {
+			if p.Type != project.Type {
+				fmt.Fprintf(stderr, "runtui: also detected %s — use --type=%s to switch\n", p.Type, p.Type)
+			}
+		}
+	}
+
+	// --runner only applies to package.json projects (npm/yarn/pnpm/bun).
 	runner := project.Runner
-	if *runnerFlag != "" {
+	if *runnerFlag != "" && project.Type == detector.TypePackageJSON {
 		runner = *runnerFlag
 	}
 
@@ -104,4 +120,24 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return ExitError
 	}
 	return ExitOK
+}
+
+// selectProject picks the project matching typeFlag (case-insensitive).
+// When typeFlag is empty, the first detected project is used (configFiles
+// order defines priority).
+func selectProject(projects []detector.Project, typeFlag string) (detector.Project, error) {
+	if typeFlag == "" {
+		return projects[0], nil
+	}
+	for _, p := range projects {
+		if strings.EqualFold(string(p.Type), typeFlag) {
+			return p, nil
+		}
+	}
+
+	types := make([]string, len(projects))
+	for i, p := range projects {
+		types[i] = string(p.Type)
+	}
+	return detector.Project{}, fmt.Errorf("no %q project found (detected: %s)", typeFlag, strings.Join(types, ", "))
 }
