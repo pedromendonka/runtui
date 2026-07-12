@@ -1,0 +1,3 @@
+# Force LF on checkout everywhere — gofmt requires LF, and the Windows CI
+# runner's autocrlf otherwise flags every .go file as unformatted.
+* text=auto eol=lf

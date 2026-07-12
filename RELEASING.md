@@ -9,7 +9,7 @@ Do these in order:
 1. **Create the Homebrew tap repo** (public, can be empty — GoReleaser pushes the formula):
 
    ```bash
-   gh repo create pedromendonka/homebrew-tap --public --description "Homebrew tap for runtui"
+   gh repo create pedromendonka/homebrew-tap --public --description "Homebrew formulas for tools"
    ```
 
 2. **Set `TAP_GITHUB_TOKEN` secret** — a GitHub PAT with `repo` scope on `homebrew-tap` (fine-grained: Contents read/write on that repo only):
