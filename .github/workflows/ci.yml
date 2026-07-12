@@ -13,6 +13,10 @@ jobs:
   test:
     name: Test (${{ matrix.os }} / go ${{ matrix.go }})
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # bash everywhere — PowerShell mangles args like -coverprofile=coverage.out
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
