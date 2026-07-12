@@ -4,7 +4,7 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.24+
 - A terminal with true-color support (for the full visual experience)
 
 ### Optional dev tools
@@ -169,7 +169,7 @@ detector.TypeCargoToml: func(_ string) parser.Parser { return &parser.CargoParse
 
 ## Code style
 
-- **Go 1.26 idioms** -- use `errors.AsType[T]()` for type-safe error assertions, `slices.SortFunc` for sorting, `strings.Builder` for string construction.
+- **Modern Go idioms** -- use `errors.As` for type-safe error assertions, `slices.SortFunc` for sorting, `strings.Builder` for string construction.
 - **No unnecessary abstractions** -- don't add helpers, wrappers, or interfaces until there's a second consumer.
 - **Error wrapping** -- use `fmt.Errorf("context: %w", err)` to wrap errors with context.
 - **No hardcoded strings** -- runner names are validated against `validRunners` in `app/app.go`.

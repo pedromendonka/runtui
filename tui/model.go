@@ -75,8 +75,8 @@ func newExecResult(taskName string, ctx parser.RunContext, args []string, err er
 	}
 
 	if err != nil {
-		// Go 1.26: generic type-safe error assertion.
-		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			r.exitCode = exitErr.ExitCode()
 		}
 	}
