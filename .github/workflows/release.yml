@@ -29,6 +29,9 @@ jobs:
   npm-publish:
     needs: goreleaser
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC trusted publishing — no npm token
     steps:
       - uses: actions/checkout@v7
 
@@ -36,6 +39,9 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+
+      - name: Update npm (OIDC needs >= 11.5.1)
+        run: npm install -g npm@latest
 
       - name: Test package
         working-directory: npm
@@ -51,5 +57,3 @@ jobs:
       - name: Publish
         working-directory: npm
         run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

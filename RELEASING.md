@@ -18,11 +18,7 @@ Do these in order:
    gh secret set TAP_GITHUB_TOKEN -R pedromendonka/runtui
    ```
 
-3. **Set `NPM_TOKEN` secret** — npm automation token (npmjs.com → Access Tokens → Granular, publish rights):
-
-   ```bash
-   gh secret set NPM_TOKEN -R pedromendonka/runtui
-   ```
+3. **Configure npm Trusted Publishing (OIDC)** — no token, no OTP. On npmjs.com → `runtui` package → Settings → Trusted Publisher: GitHub Actions, repo `pedromendonka/runtui`, workflow `release.yml`, allow `npm publish`. (Done 2026-07-12. Note: requires one prior manual publish so the package page exists.)
 
 4. **Flip the repo public** — required for `go install`, brew downloads, and the npm postinstall (all pull from public GitHub):
 
