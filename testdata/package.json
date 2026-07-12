@@ -1,0 +1,35 @@
+{
+  "name": "sample-project",
+  "scripts": {
+    "dev": "next dev",
+    "build": "tsc && node build.js",
+    "test": "jest",
+    "env:set": "dotenvx set",
+    "env:filter": "node scripts/filter.js",
+    "deploy": "./deploy.sh"
+  },
+  "runtui": {
+    "dev": {
+      "description": "Start development server"
+    },
+    "deploy": {
+      "description": "Deploy the application"
+    },
+    "test": {
+      "description": "Run test suite"
+    },
+    "env:set": {
+      "description": "Set an environment variable",
+      "args": [
+        { "name": "KEY", "required": true, "hint": "e.g. DATABASE_URL" },
+        { "name": "VALUE", "required": true }
+      ]
+    },
+    "env:filter": {
+      "description": "Filter environment variables",
+      "args": [
+        { "name": "PARTIAL_KEY", "required": true, "hint": "e.g. STRIPE" }
+      ]
+    }
+  }
+}

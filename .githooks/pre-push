@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+
+echo "==> pre-push: running tests..."
+go test ./... -count=1
+
+echo "==> pre-push: all tests passed."

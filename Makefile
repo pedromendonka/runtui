@@ -1,0 +1,72 @@
+BINARY    := runtui
+MODULE    := github.com/pedromendonka/runtui
+VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS   := -s -w -X main.version=$(VERSION)
+GOFLAGS   := -trimpath
+
+.PHONY: all build install run run-info test lint vet fmt fmt-check tidy clean setup release-dry help
+
+all: build ## Build the binary (default)
+
+build: ## Compile the binary to bin/runtui with version embedded
+	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o bin/$(BINARY) .
+
+install: ## Install the binary globally to $GOPATH/bin so you can run 'runtui' from anywhere
+	go install $(GOFLAGS) -ldflags '$(LDFLAGS)' .
+
+run: build ## Build and launch the TUI against testdata/package.json (quick manual test)
+	cd testdata && ../bin/$(BINARY)
+
+run-info: build ## Same as 'run' but with --info flag, which shows full commands without truncation
+	cd testdata && ../bin/$(BINARY) --info
+
+test: ## Run all unit tests with colored, grouped output (falls back to go test if gotestsum is not installed)
+	@which gotestsum > /dev/null 2>&1 \
+		&& gotestsum --format testdox -- ./... \
+		|| go test ./... -v
+
+vet: ## Run go vet — catches common mistakes like wrong printf formats or unreachable code
+	go vet ./...
+
+lint: vet fmt-check tidy-check ## Run go vet + format check + staticcheck + tidy check — deeper analysis for bugs, performance, and style issues
+	@which staticcheck > /dev/null 2>&1 && staticcheck ./... || echo "staticcheck not installed — skipping (go install honnef.co/go/tools/cmd/staticcheck@latest)"
+
+fmt-check: ## Fail if any Go files are not formatted (used by lint)
+	@UNFORMATTED=$$(gofmt -l .); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "ERROR: the following files are not formatted:"; \
+		echo "$$UNFORMATTED"; \
+		echo "Run 'make fmt' to fix."; \
+		exit 1; \
+	fi
+
+fmt: ## Auto-format all Go files with gofmt (simplifies code too, e.g. removes unnecessary parens)
+	gofmt -s -w .
+
+tidy: ## Run go mod tidy and verify module integrity
+	go mod tidy
+	go mod verify
+
+tidy-check: ## Fail if go.mod/go.sum would change after 'go mod tidy' (used by lint and CI)
+	@cp go.mod go.mod.bak && cp go.sum go.sum.bak; \
+	go mod tidy; \
+	if ! diff -q go.mod go.mod.bak > /dev/null || ! diff -q go.sum go.sum.bak > /dev/null; then \
+		mv go.mod.bak go.mod; mv go.sum.bak go.sum; \
+		echo "ERROR: go.mod/go.sum are not tidy. Run 'make tidy'."; \
+		exit 1; \
+	fi; \
+	rm -f go.mod.bak go.sum.bak
+
+clean: ## Delete the bin/ directory and clear Go's build cache
+	rm -rf bin/
+	go clean
+
+setup: ## Set up git hooks — required once after cloning, enforces fmt/vet/build on commit and tests on push
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed from .githooks/"
+
+release-dry: ## Simulate a full release locally — builds all OS/arch binaries without publishing
+	goreleaser release --snapshot --clean
+
+help: ## Show all available targets with descriptions
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'

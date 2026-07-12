@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -e
+
+echo "==> pre-commit: checking format..."
+UNFORMATTED=$(gofmt -l . 2>&1)
+if [ -n "$UNFORMATTED" ]; then
+    echo "ERROR: the following files are not formatted:"
+    echo "$UNFORMATTED"
+    echo ""
+    echo "Run 'make fmt' to fix."
+    exit 1
+fi
+
+echo "==> pre-commit: running go vet..."
+go vet ./...
+
+echo "==> pre-commit: building..."
+go build ./...
+
+echo "==> pre-commit: checking go.mod tidy..."
+TIDY_BEFORE=$(cat go.mod go.sum)
+go mod tidy
+TIDY_AFTER=$(cat go.mod go.sum)
+if [ "$TIDY_BEFORE" != "$TIDY_AFTER" ]; then
+    echo "ERROR: go.mod/go.sum are not tidy."
+    echo "Run 'make tidy' and commit the result."
+    exit 1
+fi
+
+echo "==> pre-commit: all checks passed."
