@@ -22,3 +22,6 @@ coverage.html
 
 # Claude Code
 .claude/
+
+# Generated at publish time (CI copies root README into the npm package)
+npm/README.md
