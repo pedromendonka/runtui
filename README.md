@@ -56,6 +56,14 @@ brew tap pedromendonka/tap
 brew install runtui
 ```
 
+### npm
+
+```bash
+npm install -g runtui
+# or run without installing:
+npx runtui
+```
+
 ### Go
 
 ```bash
