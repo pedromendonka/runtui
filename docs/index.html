@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>runtui — One TUI to run them all</title>
+<meta name="description" content="An interactive terminal UI that auto-detects your project type, lists every available task, and runs them — no memorizing command names. Single binary, zero dependencies.">
+
+<!-- Open Graph / social card -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="runtui — One TUI to run them all">
+<meta property="og:description" content="Auto-detect your project, list every task, run it from an interactive terminal UI. Single binary, zero dependencies.">
+<meta property="og:url" content="https://pedromendonka.github.io/runtui/">
+<meta property="og:image" content="https://pedromendonka.github.io/runtui/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="runtui — One TUI to run them all">
+<meta name="twitter:description" content="Auto-detect your project, list every task, run it from an interactive terminal UI. Single binary, zero dependencies.">
+<meta name="twitter:image" content="https://pedromendonka.github.io/runtui/og.png">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▶️</text></svg>">
+
+<style>
+  /* palette — pulled 1:1 from tui/styles.go */
+  :root{
+    --purple:#7C3AED; --indigo:#6366F1; --teal:#14B8A6; --teal-lt:#5EEAD4;
+    --lavender:#A78BFA; --success:#34D399; --danger:#F87171;
+    --slate:#64748B; --slate-lt:#94A3B8; --slate-dk:#475569;
+    --bg:#0B0F17; --bg-soft:#111725; --line:#1e2635;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono','Menlo','Consolas',monospace;
+    --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:
+      radial-gradient(60rem 40rem at 78% -8%, rgba(124,58,237,.18), transparent 60%),
+      radial-gradient(50rem 34rem at 12% 8%, rgba(20,184,166,.12), transparent 55%),
+      var(--bg);
+    color:#cdd6e4; font-family:var(--sans); line-height:1.6;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  a{color:var(--teal-lt);text-decoration:none}
+  .wrap{max-width:74rem;margin:0 auto;padding:0 1.5rem}
+  .grad{background:linear-gradient(100deg,var(--purple),var(--indigo) 45%,var(--teal));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* nav */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:1.4rem 0}
+  .brand{font-family:var(--mono),monospace;font-weight:700;font-size:1.15rem;letter-spacing:.02em}
+  .brand b{color:var(--teal)}
+  .nav-links{display:flex;gap:1.4rem;font-size:.92rem;color:var(--slate-lt)}
+  .nav-links a:hover{color:#fff}
+
+  /* hero */
+  .hero{display:grid;grid-template-columns:1fr;gap:2.5rem;align-items:center;padding:2.5rem 0 4rem}
+  @media(min-width:940px){.hero{grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:3.5rem;padding:4rem 0 6rem}}
+  .badge{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--mono),monospace;font-size:.78rem;
+    color:var(--teal-lt);background:rgba(20,184,166,.1);border:1px solid rgba(20,184,166,.25);
+    padding:.3rem .7rem;border-radius:999px;margin-bottom:1.3rem}
+  .badge .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success)}
+  h1{font-family:var(--mono),monospace;font-size:clamp(2.6rem,7vw,4.2rem);font-weight:800;line-height:1;letter-spacing:-.02em;margin-bottom:1rem}
+  .subtitle{font-size:1.2rem;color:var(--slate-lt);max-width:34ch;margin-bottom:2rem}
+  .cta{display:flex;flex-wrap:wrap;gap:.9rem}
+  .btn{display:inline-flex;align-items:center;gap:.55rem;font-weight:600;font-size:.98rem;
+    padding:.75rem 1.4rem;border-radius:.7rem;transition:transform .12s ease,box-shadow .12s ease;border:1px solid transparent}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{background:linear-gradient(100deg,var(--purple),var(--teal));color:#fff;box-shadow:0 8px 28px -8px rgba(124,58,237,.6)}
+  .btn-ghost{border-color:var(--slate-dk);color:#cdd6e4}
+  .btn-ghost:hover{border-color:var(--teal);color:#fff}
+
+  /* terminal window */
+  .term{border:1px solid var(--slate-dk);border-radius:.85rem;overflow:hidden;
+    background:var(--bg-soft);box-shadow:0 30px 80px -30px rgba(124,58,237,.5),0 0 0 1px rgba(255,255,255,.02) inset}
+  .term-bar{display:flex;align-items:center;gap:.5rem;padding:.65rem .9rem;background:#0d121d;border-bottom:1px solid var(--line)}
+  .term-bar .d{width:.72rem;height:.72rem;border-radius:50%}
+  .term-bar .d1{background:#ff5f57}.term-bar .d2{background:#febc2e}.term-bar .d3{background:#28c840}
+  .term-bar .t{margin-left:.4rem;font-family:var(--mono),monospace;font-size:.78rem;color:var(--slate)}
+  .term svg{display:block;width:100%;height:auto}
+
+  /* sections */
+  section{padding:4.5rem 0}
+  .sec-head{text-align:center;max-width:44rem;margin:0 auto 3rem}
+  .sec-head h2{font-family:var(--mono),monospace;font-size:clamp(1.7rem,4vw,2.4rem);font-weight:700;margin-bottom:.7rem}
+  .sec-head p{color:var(--slate-lt);font-size:1.05rem}
+
+  /* features */
+  .features{display:grid;grid-template-columns:1fr;gap:1.1rem}
+  @media(min-width:640px){.features{grid-template-columns:repeat(6,1fr)}}
+  .card{background:var(--bg-soft);border:1px solid var(--line);border-radius:.85rem;padding:1.5rem;
+    transition:border-color .15s ease,transform .15s ease}
+  .card:hover{border-color:var(--slate-dk);transform:translateY(-3px)}
+  @media(min-width:640px){.card{grid-column:span 3}.card:nth-child(1),.card:nth-child(2),.card:nth-child(3){grid-column:span 2}}
+  .card .ic{width:2.4rem;height:2.4rem;display:grid;place-items:center;border-radius:.6rem;font-size:1.2rem;
+    background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(20,184,166,.2));border:1px solid rgba(124,58,237,.3);margin-bottom:.9rem}
+  .card h3{font-family:var(--mono),monospace;font-size:1.05rem;font-weight:700;color:#e8edf5;margin-bottom:.4rem}
+  .card p{font-size:.94rem;color:var(--slate-lt)}
+
+  /* install */
+  .install{max-width:44rem;margin:0 auto}
+  .tabs{display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap}
+  .tab{font-family:var(--mono),monospace;font-size:.88rem;padding:.5rem 1rem;border-radius:.55rem;cursor:pointer;
+    color:var(--slate-lt);background:transparent;border:1px solid var(--line);transition:all .12s ease}
+  .tab[aria-selected="true"]{color:#fff;border-color:var(--teal);background:rgba(20,184,166,.12)}
+  .panel{display:none}.panel.on{display:block}
+  .code{position:relative;background:#0d121d;border:1px solid var(--line);border-radius:.7rem;
+    padding:1.1rem 4.2rem 1.1rem 1.2rem;font-family:var(--mono),monospace;font-size:.92rem;overflow-x:auto}
+  .code .p{color:var(--teal)}.code .c{color:var(--slate);display:block}
+  .copy{position:absolute;top:.7rem;right:.7rem;font-family:var(--mono),monospace;font-size:.75rem;cursor:pointer;
+    color:var(--slate-lt);background:#151c2b;border:1px solid var(--line);border-radius:.4rem;padding:.3rem .55rem;transition:all .12s}
+  .copy:hover{color:#fff;border-color:var(--teal)}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:2.5rem 0;margin-top:2rem}
+  .foot{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;font-size:.9rem;color:var(--slate)}
+  .foot-links{display:flex;gap:1.3rem}
+  .foot-links a:hover{color:#fff}
+
+  @media(prefers-reduced-motion:reduce){
+    svg *{animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="brand">▶ <b>runtui</b></div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div>
+      <span class="badge"><span class="dot"></span>single binary · zero deps</span>
+      <h1 class="grad">runtui</h1>
+      <p class="subtitle">One TUI to run them all. Auto-detects your project, lists every task, runs it — no memorizing command names.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#install">▸ Install</a>
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui">★ GitHub</a>
+      </div>
+    </div>
+
+    <!-- animated terminal -->
+    <div class="term" role="img" aria-label="Animation of the runtui terminal interface: a gradient RUNTUI banner, a task list with a moving cursor, live filtering, and a success banner after a task runs.">
+      <div class="term-bar">
+        <span class="d d1"></span><span class="d d2"></span><span class="d d3"></span>
+        <span class="t">~/my-app — runtui</span>
+      </div>
+      <svg viewBox="0 0 640 428" xmlns="http://www.w3.org/2000/svg">
+        <style>
+          .b1{fill:#7C3AED}.b2{fill:#6366F1}.b3{fill:#4DA6A8}.b4{fill:#14B8A6}
+          .tag{fill:#64748B;font-style:italic}
+          .proj{fill:#A78BFA;font-weight:700}
+          .hd{fill:#475569;font-weight:700}
+          .nm{fill:#e8edf5;font-weight:700}.cmd{fill:#64748B}.dsc{fill:#475569;font-style:italic}
+          .curc{fill:#14B8A6;font-weight:700}
+          .foot{fill:#475569}.fkey{fill:#94A3B8;font-weight:700}
+          .fx{fill:#14B8A6}
+          text{font-family:var(--mono),monospace;font-size:14px}
+
+          /* cursor arrow steps down the rows, then holds on env:set */
+          .cursor{animation:cur 9s infinite}
+          @keyframes cur{
+            0%,10%   {transform:translateY(0)}
+            18%,28%  {transform:translateY(24px)}
+            36%,46%  {transform:translateY(48px)}
+            /* filter kicks in -> jump to env:set row (filtered position) */
+            58%,88%  {transform:translateY(72px)}
+            100%     {transform:translateY(0)}
+          }
+          /* selection highlight follows cursor */
+          .selbar{animation:sel 9s infinite}
+          @keyframes sel{
+            0%,10%{transform:translateY(0);opacity:.9}
+            18%,28%{transform:translateY(24px);opacity:.9}
+            36%,46%{transform:translateY(48px);opacity:.9}
+            58%,88%{transform:translateY(72px);opacity:.9}
+            100%{transform:translateY(0);opacity:.9}
+          }
+          /* filter text types in around 50% */
+          .filt{animation:filt 9s infinite}
+          @keyframes filt{0%,46%{opacity:0}52%,92%{opacity:1}96%,100%{opacity:0}}
+          /* rows that get filtered out fade during filter phase */
+          .fadeout{animation:fo 9s infinite}
+          @keyframes fo{0%,46%{opacity:1}54%,92%{opacity:.12}96%,100%{opacity:1}}
+          /* result banner fades in near end */
+          .result{animation:res 9s infinite}
+          @keyframes res{0%,66%{opacity:0}74%,90%{opacity:1}95%,100%{opacity:0}}
+          /* blinking caret */
+          .caret{animation:blink 1s step-end infinite}
+          @keyframes blink{50%{opacity:0}}
+        </style>
+
+        <!-- banner box -->
+        <rect x="14" y="12" width="612" height="96" rx="8" fill="none" stroke="#475569" stroke-width="1"/>
+        <text x="32" y="36" xml:space="preserve" font-weight="700"><tspan class="b1">╦═╗  ╦ ╦  ╔╗ ╔  ╔╦╗  ╦ ╦  ╦</tspan></text>
+        <text x="32" y="56" xml:space="preserve" font-weight="700"><tspan class="b2">╠╦╝  ║ ║  ║╚╗║   ║   ║ ║  ║</tspan></text>
+        <text x="32" y="76" xml:space="preserve" font-weight="700"><tspan class="b3">║╚╗  ║ ║  ║ ╚║   ║   ║ ║  ║</tspan></text>
+        <text x="32" y="96" xml:space="preserve" font-weight="700"><tspan class="b4">╩ ╚  ╚═╝  ╝  ╚   ╩   ╚═╝  ╩</tspan></text>
+        <text x="360" y="76" class="tag">One TUI to run them all.</text>
+
+        <!-- project info -->
+        <text x="20" y="134" class="proj">package.json (npm)</text>
+
+        <!-- column header -->
+        <text x="52" y="162" class="hd">Task</text>
+        <text x="180" y="162" class="hd">Description</text>
+        <text x="432" y="162" class="hd">Command</text>
+        <line x1="20" y1="170" x2="620" y2="170" stroke="#1e2635"/>
+
+        <!-- selection highlight bar -->
+        <rect class="selbar" x="20" y="180" width="600" height="20" rx="4" fill="rgba(20,184,166,.10)"/>
+
+        <!-- task rows (y baseline 194, step 24) -->
+        <g class="rows">
+          <!-- row 0: dev -->
+          <text x="52" y="194" class="nm">dev</text>
+          <text x="180" y="194" class="dsc">Start development server</text>
+          <text x="432" y="194" class="cmd">next dev</text>
+          <!-- row 1: build -->
+          <g class="fadeout">
+            <text x="52" y="218" class="nm">build</text>
+            <text x="432" y="218" class="cmd">tsc &amp;&amp; node build.js</text>
+          </g>
+          <!-- row 2: test -->
+          <g class="fadeout">
+            <text x="52" y="242" class="nm">test</text>
+            <text x="180" y="242" class="dsc">Run test suite</text>
+            <text x="432" y="242" class="cmd">jest</text>
+          </g>
+          <!-- row 3: env:set (survives filter) -->
+          <text x="52" y="266" class="nm">env:set</text>
+          <text x="180" y="266" class="dsc">Set an environment variable</text>
+          <text x="432" y="266" class="cmd">dotenvx set</text>
+          <!-- row 4: env:filter (survives filter) -->
+          <text x="52" y="290" class="nm">env:filter</text>
+          <text x="180" y="290" class="dsc">Filter environment variables</text>
+          <text x="432" y="290" class="cmd">node scripts/filter.js</text>
+        </g>
+
+        <!-- cursor arrow -->
+        <text class="cursor curc" x="30" y="194"><tspan>→</tspan></text>
+
+        <!-- filter line -->
+        <text x="20" y="330" class="foot">/ <tspan class="filt fx">env</tspan><tspan class="filt caret" fill="#14B8A6">▏</tspan></text>
+
+        <!-- footer hints -->
+        <text x="20" y="360" class="foot"><tspan class="fkey">↑↓</tspan> navigate  ·  <tspan class="fkey">/</tspan> filter  ·  <tspan class="fkey">enter</tspan> run  ·  <tspan class="fkey">q</tspan> quit</text>
+
+        <!-- result banner (fades in at end) -->
+        <g class="result">
+          <rect x="20" y="376" width="260" height="34" rx="8" fill="rgba(52,211,153,.08)" stroke="#34D399" stroke-width="1"/>
+          <text x="36" y="398"><tspan class="fx" fill="#34D399" font-weight="700">✓ DONE</tspan>  <tspan fill="#94A3B8">env:set</tspan>  <tspan fill="#475569">exit 0</tspan></text>
+        </g>
+      </svg>
+    </div>
+  </header>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 class="grad">Stop memorizing commands</h2>
+      <p>runtui reads your project and hands you a menu. Everything you'd type, one keystroke away.</p>
+    </div>
+    <div class="features">
+      <div class="card">
+        <div class="ic" aria-hidden="true">🔍</div>
+        <h3>Auto-detect</h3>
+        <p>Scans for <code>package.json</code> and <code>Makefile</code>, picks the right package manager (npm, yarn, pnpm, bun) straight from your lockfile.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">/</div>
+        <h3>Instant filter</h3>
+        <p>Type any character to fuzzy-narrow the task list by name. Hundreds of scripts become one keystroke.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">⌨</div>
+        <h3>Argument prompts</h3>
+        <p>Free-form input for any task, or structured fields with labels, required markers and hints via a <code>runtui</code> config key.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">⇄</div>
+        <h3>Full passthrough</h3>
+        <p>The TUI suspends while your command runs with full terminal access, then resumes with a success or failure badge and exit code.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">📦</div>
+        <h3>Single binary</h3>
+        <p>No runtime, no dependencies. Built in Go with Bubble Tea. Drop it in your <code>PATH</code> and it runs anywhere.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INSTALL -->
+<section id="install">
+  <div class="wrap install">
+    <div class="sec-head">
+      <h2 class="grad">Install in one line</h2>
+      <p>Pick your poison. Then just run <code>runtui</code> in any project directory.</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Install method">
+      <button class="tab" id="tab-brew" role="tab" aria-selected="true" aria-controls="panel-brew" data-p="brew">Homebrew</button>
+      <button class="tab" id="tab-npm" role="tab" aria-selected="false" aria-controls="panel-npm" data-p="npm">npm</button>
+      <button class="tab" id="tab-go" role="tab" aria-selected="false" aria-controls="panel-go" data-p="go">Go</button>
+    </div>
+
+    <div class="panel on" id="panel-brew" role="tabpanel" aria-labelledby="tab-brew" data-panel="brew">
+      <div class="code">
+        <button class="copy" aria-label="Copy commands">copy</button>
+        <span class="c"><span class="p">$</span> brew tap pedromendonka/tap</span>
+        <span class="c"><span class="p">$</span> brew install runtui</span>
+      </div>
+    </div>
+    <div class="panel" id="panel-npm" role="tabpanel" aria-labelledby="tab-npm" data-panel="npm">
+      <div class="code">
+        <button class="copy" aria-label="Copy commands">copy</button>
+        <span class="c"><span class="p">$</span> npm install -g runtui</span>
+        <span class="c"><span class="p">#</span> or run without installing:</span>
+        <span class="c"><span class="p">$</span> npx runtui</span>
+      </div>
+    </div>
+    <div class="panel" id="panel-go" role="tabpanel" aria-labelledby="tab-go" data-panel="go">
+      <div class="code">
+        <button class="copy" aria-label="Copy commands">copy</button>
+        <span class="c"><span class="p">$</span> go install github.com/pedromendonka/runtui@latest</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div><span class="brand">▶ <b>runtui</b></span> · One TUI to run them all.</div>
+    <div class="foot-links">
+      <a target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui">GitHub</a>
+      <a target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui/releases">Releases</a>
+      <a target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui/blob/main/ROADMAP.md">Roadmap</a>
+      <a target="_blank" rel="noopener" href="https://github.com/pedromendonka/runtui/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // install tabs
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected','false'));
+      tab.setAttribute('aria-selected','true');
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+      document.querySelector('[data-panel="'+tab.dataset.p+'"]').classList.add('on');
+    });
+  });
+  // copy buttons
+  document.querySelectorAll('.copy').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(!navigator.clipboard)return;
+      const cmds=[...btn.parentElement.querySelectorAll('.c')]
+        .filter(c=>c.querySelector('.p')?.textContent!=='#')      // drop comment lines
+        .map(c=>c.textContent.replace(/^[$#]\s?/,'').trim())
+        .join('\n');
+      navigator.clipboard.writeText(cmds).then(()=>{
+        btn.textContent='copied ✓';setTimeout(()=>btn.textContent='copy',1400);
+      }).catch(()=>{btn.textContent='copy';});
+    });
+  });
+</script>
+</body>
+</html>
