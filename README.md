@@ -2,6 +2,8 @@
 
 > One TUI to run them all.
 
+**[Website](https://pedromendonka.github.io/runtui/)** · [Install](#install) · [GitHub](https://github.com/pedromendonka/runtui)
+
 **runtui** is an interactive terminal UI that auto-detects your project type, lists all available tasks, and lets you select, configure arguments, and run them -- without memorizing command names.
 
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Distributed as a single binary.

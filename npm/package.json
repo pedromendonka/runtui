@@ -17,7 +17,7 @@
     "type": "git",
     "url": "git+https://github.com/pedromendonka/runtui.git"
   },
-  "homepage": "https://github.com/pedromendonka/runtui",
+  "homepage": "https://pedromendonka.github.io/runtui/",
   "keywords": [
     "tui",
     "task-runner",
